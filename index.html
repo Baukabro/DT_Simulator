@@ -1,0 +1,2877 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Twin Map</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #181c21;
+            font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+            color: #f2f4f7;
+        }
+
+        #app-shell {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(180deg, #1e2329 0%, #181c21 100%);
+        }
+
+        #top-bar {
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            background: linear-gradient(180deg,
+                    rgba(36, 41, 48, 0.98) 0%,
+                    rgba(28, 32, 38, 0.98) 100%);
+            box-shadow: none;
+        }
+
+        #main-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #f5f7fa;
+            letter-spacing: 0.1px;
+            text-shadow: none;
+        }
+
+        #sub-title {
+            font-size: 13px;
+            color: #8fa6bf;
+            margin-top: 4px;
+            letter-spacing: 0.15px;
+        }
+
+        #title-block {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .title-accent {
+            color: #8fb3d9;
+        }
+
+        .status-chip {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(66, 199, 122, 0.12);
+            border: 1px solid rgba(66, 199, 122, 0.22);
+            color: #eaf9f0;
+            font-weight: 700;
+            font-size: 12px;
+            letter-spacing: 0.3px;
+            box-shadow: none;
+        }
+
+        #main-layout {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 230px 1fr 320px;
+            gap: 16px;
+            padding: 16px;
+            min-height: 0;
+        }
+
+        #left-panel,
+        #right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        #map-panel {
+            position: relative;
+            min-height: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+            border-radius: 18px;
+            overflow: hidden;
+            background: #111417;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+        }
+
+        .panel-card {
+
+            border-radius: 18px;
+            padding: 12px;
+            color: #edf2f7;
+            background: rgba(34, 39, 46, 0.96);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            position: relative;
+        }
+
+        .panel-card::before {
+            content: none;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #d6dde6;
+            text-shadow: none;
+        }
+
+        .panel-label {
+            display: block;
+            font-size: 13px;
+            color: #8bb8d8;
+            margin-bottom: 6px;
+        }
+
+        .panel-select {
+            width: 100%;
+            margin-bottom: 14px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(70, 180, 255, 0.35);
+            background: rgba(4, 16, 34, 0.96);
+            color: #eaf4ff;
+            font-size: 15px;
+            outline: none;
+            box-shadow:
+                0 0 10px rgba(0, 140, 255, 0.06),
+                inset 0 0 8px rgba(0, 100, 255, 0.05);
+        }
+
+        .panel-select:focus {
+            border-color: rgba(0, 220, 255, 0.55);
+            box-shadow:
+                0 0 0 1px rgba(0, 220, 255, 0.12),
+                0 0 12px rgba(0, 180, 255, 0.12);
+        }
+
+        .top-toggle-btn {
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(62, 69, 79, 0.92);
+            color: #eef2f6;
+            font-weight: 600;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: none;
+        }
+
+        .top-toggle-btn:hover {
+            background: rgba(74, 82, 93, 0.96);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            color: #eef2f7;
+        }
+
+        .route-metric-row {
+            display: grid;
+            grid-template-columns: 110px 1fr;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(120, 170, 220, 0.12);
+            color: #d8eeff;
+            align-items: start;
+        }
+
+        .route-metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .route-metric-label {
+            color: #b9dfff;
+            line-height: 1.4;
+        }
+
+        .route-metric-value {
+            text-align: left;
+            font-weight: 700;
+            line-height: 1.45;
+            word-break: break-word;
+            white-space: normal;
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .stop-square-marker {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: #d9f7c8;
+            border: 2px solid #f4fff0;
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35),
+                0 0 8px rgba(180, 255, 180, 0.35);
+        }
+
+        .stop-square-marker.current {
+            width: 14px;
+            height: 14px;
+            background: #00c2ff;
+            border: 2px solid #dff8ff;
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35),
+                0 0 10px rgba(0, 194, 255, 0.45);
+        }
+
+        .stop-square-marker.next {
+            width: 13px;
+            height: 13px;
+            background: #77e66a;
+            border: 2px solid #f3fff2;
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.35),
+                0 0 10px rgba(119, 230, 106, 0.40);
+        }
+
+        .leaflet-popup-content-wrapper {
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.97);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+        }
+
+        .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.97);
+        }
+
+        .leaflet-control-zoom a {
+            background: rgba(9, 24, 44, 0.92) !important;
+            color: #eaf4ff !important;
+            border: 1px solid rgba(0, 220, 255, 0.20) !important;
+            box-shadow: 0 0 10px rgba(0, 180, 255, 0.10);
+        }
+
+        .leaflet-control-zoom a:hover {
+            background: rgba(15, 35, 60, 0.96) !important;
+        }
+
+        .route-toggle-btn {
+            margin-top: 12px;
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03);
+            color: #e6edf5;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .route-toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .route-stops-panel {
+            display: none;
+            margin-top: 12px;
+        }
+
+        .route-stops-panel.open {
+            display: block;
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(50, 58, 69, 0.94);
+            color: #dde5ee;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .tab-btn.active {
+            background: rgba(78, 92, 112, 0.98);
+            border-color: rgba(255, 255, 255, 0.10);
+            color: #ffffff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .traffic-bar {
+            height: 8px;
+            border-radius: 6px;
+            margin-top: 4px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+        }
+
+        .traffic-fill {
+            height: 100%;
+            border-radius: 6px;
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .kpi-card {
+            background: rgba(255, 255, 255, 0.025);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .kpi-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .kpi-label {
+            font-size: 11px;
+            color: #c5ced9;
+            margin-top: 2px;
+            line-height: 1.25;
+        }
+
+        .widget-card {
+            background: rgba(40, 46, 54, 0.85);
+            color: #edf4fb;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: none;
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+
+        .widget-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #f4f7fa;
+            letter-spacing: 0.1px;
+        }
+
+        .widget-value-lg {
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 8px;
+            color: #ffffff;
+        }
+
+        .widget-subtle {
+            font-size: 12px;
+            color: #aeb8c4;
+        }
+
+        .gauge-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .metric-split {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .metric-split:last-child {
+            margin-bottom: 0;
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: #b8c2cf;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        .map-widget {
+            position: absolute;
+            right: 18px;
+            top: 18px;
+            z-index: 1000;
+            width: 220px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            background: rgba(34, 39, 46, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: none;
+            color: #f2f6fb;
+            backdrop-filter: blur(4px);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .status-tile {
+            background: rgba(54, 62, 73, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 14px;
+            padding: 12px;
+            min-height: 82px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .status-label {
+            font-size: 12px;
+            color: #aeb8c4;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .status-value {
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .status-good {
+            color: #2ecc71;
+        }
+
+        .status-medium {
+            color: #ff9f0a;
+        }
+
+        .status-bad {
+            color: #ff3b30;
+        }
+
+        .status-info {
+            color: #00c2ff;
+        }
+
+        .status-neutral {
+            color: #dfefff;
+        }
+
+        .support-bus-decision-marker {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #00e676;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 18px rgba(0, 230, 118, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #062915;
+            font-size: 19px;
+            font-weight: 900;
+        }
+
+        .dispatch-target-marker {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #ff3b30;
+            border: 3px solid #ffffff;
+            box-shadow: 0 0 18px rgba(255, 59, 48, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            font-weight: 900;
+            animation: dispatchPulse 1.2s infinite;
+        }
+
+        .dispatch-label {
+            background: rgba(255, 255, 255, 0.96);
+            color: #111;
+            border-radius: 14px;
+            padding: 9px 11px;
+            border: 1px solid rgba(0, 0, 0, 0.14);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+            font-family: Inter, Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.35;
+            min-width: 220px;
+        }
+
+        .dispatch-label-title {
+            color: #ff3b30;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .dispatch-label-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .dispatch-label-row span:last-child {
+            text-align: right;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .dispatch-label-good {
+            color: #0a8f3c;
+            font-weight: 900;
+        }
+
+        .dispatch-label-bad {
+            color: #c62828;
+            font-weight: 900;
+        }
+
+        @keyframes dispatchPulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
+            }
+
+            70% {
+                transform: scale(1.08);
+                box-shadow: 0 0 0 16px rgba(255, 59, 48, 0);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
+            }
+        }
+
+        .bus-action-badge {
+            background: rgba(255, 255, 255, 0.96);
+            color: #111;
+            border-radius: 14px;
+            padding: 8px 10px;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+            font-family: Inter, Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.35;
+            min-width: 120px;
+        }
+
+        .bus-action-badge-title {
+            font-weight: 800;
+            margin-bottom: 4px;
+            color: #0066ff;
+        }
+
+        .bus-action-badge-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .bus-action-badge-good {
+            color: #0a8f3c;
+            font-weight: 800;
+        }
+
+        .bus-action-badge-bad {
+            color: #c62828;
+            font-weight: 800;
+        }
+
+        .bus-action-badge-waiting {
+            color: #ff8c00;
+            font-weight: 800;
+        }
+
+        @media (max-width: 1400px) {
+            #main-layout {
+                grid-template-columns: 220px 1fr 300px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app-shell">
+        <div id="top-bar">
+            <div id="title-block">
+                <div id="main-title">
+                    Smart City Transport <span class="title-accent">Digital Twin</span>
+                </div>
+            </div>
+            <div id="top-status" style="display: flex; gap: 10px; align-items: center;">
+                <button id="traffic-toggle" class="top-toggle-btn">Traffic Layer: ON</button>
+                <span class="status-chip">LIVE</span>
+            </div>
+        </div>
+
+        <div id="main-layout">
+            <div id="left-panel">
+                <div class="panel-card">
+                    <div class="panel-title">System Overview</div>
+                    <div id="overview-content">
+
+                        <div class="kpi-grid">
+                            <div class="kpi-card">
+                                <div class="kpi-value" id="metric-active-buses">-</div>
+                                <div class="kpi-label">Active buses</div>
+                            </div>
+
+                            <div class="kpi-card">
+                                <div class="kpi-value" id="metric-avg-speed">-</div>
+                                <div class="kpi-label">Avg speed</div>
+                            </div>
+                        </div>
+
+                        <div class="metric-row">
+                            <span>Routes</span>
+                            <b id="metric-routes">-</b>
+                        </div>
+
+                        <div class="metric-row">
+                            <span>High traffic buses</span>
+                            <b id="metric-traffic-buses">-</b>
+                        </div>
+                        <div class="widget-subtle" id="metric-traffic-buses-detail"
+                            style="margin-top:-2px; margin-bottom:6px; font-size:11px;">
+                            None
+                        </div>
+
+                        <div class="metric-row">
+                            <span>Overcrowded buses</span>
+                            <b id="metric-overcrowded-buses">-</b>
+                        </div>
+                        <div class="widget-subtle" id="metric-overcrowded-buses-detail"
+                            style="margin-top:-2px; margin-bottom:6px; font-size:11px;">
+                            None
+                        </div>
+
+                        <div class="metric-row">
+                            <span>Mode</span>
+                            <b id="metric-mode">Simulation</b>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="panel-title">Detected Congestion Zones</div>
+                    <div id="congestion-zones-left">
+                        <div class="kpi-card" style="margin-top: 8px;">
+                            <div class="kpi-value" id="metric-congestion-zones">0</div>
+                            <div class="kpi-label">Active / detected zones</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="panel-title">Route Progress</div>
+                    <div id="route-progress-widget">
+                        <div class="widget-subtle">Loading stop information...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="map-panel">
+                <div id="map"></div>
+                <div id="weather-widget" class="map-widget">
+                    Loading weather...
+                </div>
+            </div>
+
+            <div id="right-panel">
+                <div id="analytics-panel" class="panel-card">
+                    <div class="panel-title">Bus Dashboard</div>
+
+                    <label for="bus-select" class="panel-label">Select bus</label>
+                    <select id="bus-select" class="panel-select">
+                        <option value="Bus_1">Bus_1</option>
+                    </select>
+
+                    <div class="tab-bar">
+                        <button class="tab-btn active" data-tab="overview-tab">Overview</button>
+                        <button class="tab-btn" data-tab="performance-tab">Performance</button>
+                        <button class="tab-btn" data-tab="events-tab">Events</button>
+                    </div>
+
+                    <div id="overview-tab" class="tab-content active"></div>
+                    <div id="performance-tab" class="tab-content"></div>
+                    <div id="events-tab" class="tab-content"></div>
+                </div>
+            </div>
+        </div>
+
+        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+        <script>
+            const API_BASE = "http://127.0.0.1:8000";
+
+            const map = L.map('map').setView([51.13, 71.41], 12);
+
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            let markers = {};
+
+            let supportBusMarker = null;
+            let trafficStateMemory = {};
+            let routeLayers = {};
+            let baseRouteLayers = {};
+            let trafficOverlayLayers = {};
+
+            let selectedBusId = "Bus_1";
+            let isFetchingBuses = false;
+            let historyLoaded = {};
+            let lastKnownPoints = {};
+            let trafficLayerEnabled = true;
+            let currentSegments = {};
+            let problemZoneLayers = {};
+            let zoneAnimations = {};
+            let detectedZoneCounts = {};
+
+            let stopMarkers = {};
+            let stopLayerGroup = L.layerGroup().addTo(map);
+            let decisionLayerGroup = L.layerGroup().addTo(map);
+            let decisionVisuals = {};
+
+            const SUPPORT_DECISION = {
+                busCapacity: 60,
+                minRouteQueue: 5,
+                supportBusCapacity: 60,
+                supportBusAverageSpeedKmh: 28,
+                dispatchPreparationMinutes: 2,
+                nextRegularBusEtaMinutes: 14,
+                routeShapeFile: "data/routes/route_57/route_57_shape.csv",
+                reserveRouteFractions: [0.0, 0.25, 0.50, 0.75],
+                minUpstreamShapePoints: 35,
+                fallbackLookbackShapePoints: 120,
+                maxNamedReserveDistanceShapePoints: 95,
+                dynamicLookbackShapePoints: 55,
+
+                // Reserve point / route terminal near the first stop
+                depot: {
+                    name: "Route 57 Reserve Depot",
+                    latitude: 51.116987,
+                    longitude: 71.388519
+                }
+            };
+            let busBadgeLayerGroup = L.layerGroup().addTo(map);
+            let busActionBadges = {};
+
+            let supportRouteShape = [];
+            let supportRouteShapeLoading = false;
+            let decisionVisualKeys = {};
+            let supportAnimationTimers = {};
+
+            let analyticsCache = {
+                overview: "",
+                events: "",
+                performanceSummary: ""
+            };
+
+            let trendWidgetCache = {
+                speed: `<div style="color:#8bb8d8; font-size:13px;">Loading speed trend...</div>`,
+                passengers: `<div style="color:#8bb8d8; font-size:13px;">Loading passenger trend...</div>`
+            };
+
+            function svgToDataUrl(svg) {
+                return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+            }
+
+            function setupTabs() {
+                const buttons = document.querySelectorAll(".tab-btn");
+                const contents = document.querySelectorAll(".tab-content");
+
+                buttons.forEach(button => {
+                    button.addEventListener("click", () => {
+                        buttons.forEach(btn => btn.classList.remove("active"));
+                        contents.forEach(tab => tab.classList.remove("active"));
+
+                        button.classList.add("active");
+                        document.getElementById(button.dataset.tab).classList.add("active");
+                    });
+                });
+            }
+
+            function weatherCodeToText(code) {
+                if (code === 0) return "Clear";
+                if ([1, 2, 3].includes(code)) return "Cloudy";
+                if ([45, 48].includes(code)) return "Fog";
+                if ([51, 53, 55, 61, 63, 65].includes(code)) return "Rain";
+                if ([71, 73, 75].includes(code)) return "Snow";
+                if ([95, 96, 99].includes(code)) return "Storm";
+                return "Mixed";
+            }
+
+            async function fetchAstanaWeather() {
+                try {
+                    const response = await fetch(`${API_BASE}/api/weather/astana`);
+                    const data = await response.json();
+
+                    if (data.error) return;
+
+                    const html = `
+                    <div style="font-size: 14px; color: #8fd3ff; margin-bottom: 4px;">Astana Weather</div>
+                    <div style="font-size: 28px; font-weight: 700;">${data.currentTemperature}°C</div>
+                    <div style="font-size: 14px; margin: 4px 0 8px 0;">${weatherCodeToText(data.currentWeatherCode)}</div>
+                    <div style="font-size: 13px; color: #b9dfff;">
+                        H: ${data.todayMax}°C &nbsp; L: ${data.todayMin}°C
+                    </div>
+                    <div style="font-size: 13px; color: #b9dfff;">
+                        Wind: ${data.currentWindSpeed} km/h
+                    </div>
+                `;
+
+                    document.getElementById("weather-widget").innerHTML = html;
+                } catch (error) {
+                    console.error("Weather fetch error:", error);
+                }
+            }
+
+            function isSupportBus(bus) {
+                return bus && String(bus.busId || "").startsWith("Support_");
+            }
+
+            function getBusColor(bus) {
+                if (isSupportBus(bus)) return "#00e676";
+                if (!bus || !bus.trafficLevel) return "#7f8c8d";
+                if (bus.trafficLevel === "HIGH") return "#e74c3c";
+                if (bus.trafficLevel === "MEDIUM") return "#f39c12";
+                if (bus.trafficLevel === "LOW") return "#2ecc71";
+                return "#7f8c8d";
+            }
+
+            function smoothTrafficLevel(prev, curr) {
+                if (!prev) return curr;
+
+                const levelMap = { LOW: 1, MEDIUM: 2, HIGH: 3 };
+                const prevVal = levelMap[prev] || 1;
+                const currVal = levelMap[curr] || 1;
+                const diff = currVal - prevVal;
+
+                if (Math.abs(diff) > 1) {
+                    return prev;
+                }
+
+                if (curr === "MEDIUM" && prev === "LOW") {
+                    return "LOW";
+                }
+
+                return curr;
+            }
+            function getTrafficSegmentColor(level) {
+                if (level === "HIGH") return "#ff4d4f";
+                if (level === "MEDIUM") return "#f5c542";
+                return null;
+            }
+
+            function detectProblemZones(busId, history) {
+                const zones = [];
+                let currentZone = [];
+
+                for (let i = 0; i < history.length; i++) {
+                    const point = history[i];
+
+                    if (point.trafficLevel === "HIGH") {
+                        currentZone.push(point);
+                    } else {
+                        if (currentZone.length >= 4) {
+                            zones.push([...currentZone]);
+                        }
+                        currentZone = [];
+                    }
+                }
+
+                if (currentZone.length >= 4) {
+                    zones.push([...currentZone]);
+                }
+
+                return zones;
+            }
+
+            function drawProblemZones(busId, zones) {
+                detectedZoneCounts[busId] = zones.length;
+                updateDetectedZonesMetric();
+
+                if (!trafficLayerEnabled) return;
+
+                if (!problemZoneLayers[busId]) {
+                    problemZoneLayers[busId] = L.layerGroup();
+                    if (trafficLayerEnabled) {
+                        problemZoneLayers[busId].addTo(map);
+                    }
+                } else {
+                    problemZoneLayers[busId].clearLayers();
+                }
+
+                if (zoneAnimations[busId]) {
+                    clearInterval(zoneAnimations[busId]);
+                    zoneAnimations[busId] = null;
+                }
+
+                let animatedMarker = null;
+
+                zones.forEach(zone => {
+                    const latlngs = zone.map(p => [p.latitude, p.longitude]);
+
+                    const polyline = L.polyline(latlngs, {
+                        color: "#ff0000",
+                        weight: 14,
+                        opacity: 0.35,
+                        lineCap: "round"
+                    });
+
+                    problemZoneLayers[busId].addLayer(polyline);
+
+                    const mid = zone[Math.floor(zone.length / 2)];
+
+                    const marker = L.circleMarker(
+                        [mid.latitude, mid.longitude],
+                        {
+                            radius: 7,
+                            color: "#ff3b30",
+                            fillColor: "#ff3b30",
+                            fillOpacity: 1,
+                            weight: 2
+                        }
+                    );
+
+                    marker.bindPopup(`
+                    <div style="
+                        background: rgba(10, 24, 46, 0.95);
+                        color: #eaf4ff;
+                        padding: 8px 12px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 60, 60, 0.4);
+                        font-weight: 600;
+                        font-size: 13px;
+                    ">
+                        🚨 Congestion Zone
+                    </div>
+                `);
+
+                    problemZoneLayers[busId].addLayer(marker);
+
+                    if (!animatedMarker) {
+                        animatedMarker = marker;
+                    }
+                });
+
+                if (animatedMarker) {
+                    let growing = true;
+
+                    zoneAnimations[busId] = setInterval(() => {
+                        const currentRadius = animatedMarker.getRadius();
+
+                        if (growing) {
+                            animatedMarker.setRadius(currentRadius + 0.3);
+                            if (currentRadius > 10) growing = false;
+                        } else {
+                            animatedMarker.setRadius(currentRadius - 0.3);
+                            if (currentRadius < 6) growing = true;
+                        }
+                    }, 80);
+                }
+            }
+            function refreshMapLayout() {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 120);
+            }
+
+            function updateDetectedZonesMetric() {
+                const totalZones = Object.values(detectedZoneCounts).reduce((sum, value) => sum + value, 0);
+                const el = document.getElementById("metric-congestion-zones");
+                if (el) {
+                    el.textContent = totalZones;
+                }
+            }
+
+            function getStatusClass(type, value) {
+                if (type === "delay") {
+                    if (value === "HIGH") return "status-bad";
+                    if (value === "MEDIUM") return "status-medium";
+                    return "status-good";
+                }
+
+                if (type === "operation") {
+                    if (value === "CONGESTED") return "status-bad";
+                    if (value === "CROWDED" || value === "DELAY_RISK") return "status-medium";
+                    return "status-good";
+                }
+
+                if (type === "traffic") {
+                    if (value === "HIGH") return "status-bad";
+                    if (value === "MEDIUM") return "status-medium";
+                    return "status-good";
+                }
+
+                if (type === "event") {
+                    if (value === "MOVING") return "status-info";
+                    if (value === "STOP") return "status-medium";
+                    if (value === "TRAFFIC") return "status-bad";
+                    if (value === "IDLE") return "status-neutral";
+                }
+
+                return "status-neutral";
+            }
+
+            function ensureRouteLayer(busId) {
+                if (!routeLayers[busId]) {
+                    routeLayers[busId] = L.layerGroup();
+                    if (trafficLayerEnabled) {
+                        routeLayers[busId].addTo(map);
+                    }
+                }
+            }
+
+            function getStableTrafficLevel(busId, newLevel) {
+                if (!trafficStateMemory[busId]) {
+                    trafficStateMemory[busId] = {
+                        level: newLevel,
+                        counter: 0
+                    };
+                    return newLevel;
+                }
+
+                const state = trafficStateMemory[busId];
+
+                if (state.level === newLevel) {
+                    state.counter++;
+                    return state.level;
+                }
+
+                state.counter++;
+
+                if (state.counter >= 5) {
+                    state.level = newLevel;
+                    state.counter = 0;
+                }
+
+                return state.level;
+            }
+
+            function drawTrafficSegment(busId, fromPoint, toPoint) {
+                if (!trafficLayerEnabled) return;
+                if (!fromPoint || !toPoint) return;
+
+                ensureRouteLayer(busId);
+
+                const raw = smoothTrafficLevel(
+                    fromPoint.trafficLevel,
+                    toPoint.trafficLevel
+                );
+
+                const smoothed = getStableTrafficLevel(busId, raw);
+                const color = getTrafficSegmentColor(smoothed);
+                if (!color) {
+                    return;
+                }
+
+                const lastSegment = currentSegments[busId];
+
+                if (lastSegment && lastSegment.color === color) {
+                    lastSegment.polyline.addLatLng([
+                        toPoint.latitude,
+                        toPoint.longitude
+                    ]);
+                    return;
+                }
+
+
+                const coloredLine = L.polyline(
+                    [
+                        [fromPoint.latitude, fromPoint.longitude],
+                        [toPoint.latitude, toPoint.longitude]
+                    ],
+                    {
+                        color: color,
+                        weight: smoothed === "HIGH" ? 7 : 5,
+                        opacity: smoothed === "HIGH" ? 0.9 : 0.65,
+                        lineCap: "round",
+                        lineJoin: "round"
+                    }
+                );
+
+                routeLayers[busId].addLayer(coloredLine);
+
+                currentSegments[busId] = {
+                    color: color,
+                    polyline: coloredLine
+                };
+            }
+
+            function showSupportBus(lat, lon) {
+
+                if (!supportBusMarker) {
+
+                    supportBusMarker = L.circleMarker(
+                        [lat, lon],
+                        {
+                            radius: 10,
+                            color: "#00ff88",
+                            fillColor: "#00ff88",
+                            fillOpacity: 0.9,
+                            weight: 2
+                        }
+                    ).addTo(map);
+
+                    supportBusMarker.bindTooltip(
+                        "Support Bus",
+                        {
+                            permanent: false,
+                            direction: "top"
+                        }
+                    );
+
+                } else {
+
+                    supportBusMarker.setLatLng([lat, lon]);
+
+                }
+            }
+
+            function setTrafficLayerVisibility(enabled) {
+                trafficLayerEnabled = enabled;
+
+                Object.values(trafficOverlayLayers).forEach(layerGroup => {
+                    if (!layerGroup) return;
+
+                    if (enabled) {
+                        layerGroup.addTo(map);
+                    } else {
+                        map.removeLayer(layerGroup);
+                    }
+                });
+
+                Object.values(problemZoneLayers).forEach(layerGroup => {
+                    if (!layerGroup) return;
+
+                    if (enabled) {
+                        layerGroup.addTo(map);
+                    } else {
+                        map.removeLayer(layerGroup);
+                    }
+                });
+
+                const toggleBtn = document.getElementById("traffic-toggle");
+                if (toggleBtn) {
+                    toggleBtn.textContent = enabled ? "Traffic Layer: ON" : "Traffic Layer: OFF";
+                }
+            }
+
+            document.getElementById("traffic-toggle").addEventListener("click", () => {
+                setTrafficLayerVisibility(!trafficLayerEnabled);
+            });
+
+            function getBusIcon(bus) {
+                const isSelected = bus.busId === selectedBusId;
+                const size = isSelected ? 40 : 30;
+                const color = getBusColor(bus);
+                const stroke = isSelected ? "#111111" : "#ffffff";
+                const strokeWidth = isSelected ? 2.5 : 1.5;
+
+                const roleLabel = isSupportBus(bus) ? "S" : "";
+                const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64">
+        <g>
+            <rect x="8" y="8" width="48" height="48" rx="12" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+            <rect x="18" y="20" width="28" height="14" rx="4" fill="#eaf7ff"/>
+            <rect x="16" y="36" width="32" height="7" rx="3" fill="#ffffff" opacity="0.95"/>
+            <circle cx="22" cy="47" r="4" fill="#1d2a38"/>
+            <circle cx="42" cy="47" r="4" fill="#1d2a38"/>
+            <rect x="28" y="16" width="8" height="4" rx="2" fill="#ffffff" opacity="0.7"/>
+            ${roleLabel ? `<circle cx="50" cy="14" r="10" fill="#ffffff"/><text x="50" y="18" text-anchor="middle" font-size="13" font-weight="900" fill="#00a85a">${roleLabel}</text>` : ""}
+        </g>
+    </svg>`;
+
+                return L.icon({
+                    iconUrl: svgToDataUrl(svg),
+                    iconSize: [size, size],
+                    iconAnchor: [size / 2, size / 2],
+                    popupAnchor: [0, -size / 2]
+                });
+            }
+
+            function buildPopup(bus) {
+                return `
+                <div style="font-family: Arial, sans-serif; min-width: 170px;">
+                    <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
+                        ${bus.busId}
+                    </div>
+                    <div style="font-size: 14px; line-height: 1.5;">
+                        <b>Speed:</b> ${(bus.speed * 3.6).toFixed(1)} km/h<br>
+                        <b>Passengers:</b> ${bus.passengerCount}/60<br>
+                        <b>Role:</b> ${isSupportBus(bus) ? "SUPPORT" : "MAIN"}<br>
+                        <b>Event:</b> ${bus.eventType}<br>
+                        <b>Traffic:</b> ${bus.trafficLevel}<br>
+                        <b>Door:</b> ${bus.doorStatus}<br>
+                        <b>Stop:</b> ${bus.currentStopName || "-"}<br>
+                        <b>Boarded:</b> +${bus.boardingCount || 0}<br>
+                        <b>Alighted:</b> -${bus.alightingCount || 0}<br>
+                        <b>Unserved queue:</b> ${bus.waitingPassengers || 0}<br>
+                        <b>Time:</b> ${bus.timestamp}
+                    </div>
+                </div>
+            `;
+            }
+            function simplifyPoints(points, minDistance = 0.00015) {
+                if (!points || points.length < 2) return points;
+
+                const result = [points[0]];
+
+                for (let i = 1; i < points.length; i++) {
+                    const prev = result[result.length - 1];
+                    const curr = points[i];
+
+                    const dx = curr.latitude - prev.latitude;
+                    const dy = curr.longitude - prev.longitude;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist > minDistance) {
+                        result.push(curr);
+                    }
+                }
+
+                return result;
+            }
+
+            function getTrafficOverlayStyle(level) {
+                if (level === "HIGH") {
+                    return {
+                        color: "#ff3b30",
+                        weight: 7,
+                        opacity: 0.85
+                    };
+                }
+
+                if (level === "MEDIUM") {
+                    return {
+                        color: "#ffb020",
+                        weight: 5,
+                        opacity: 0.65
+                    };
+                }
+
+                return null;
+            }
+
+            function ensureTrafficOverlayLayer(busId) {
+                if (!trafficOverlayLayers[busId]) {
+                    trafficOverlayLayers[busId] = L.layerGroup();
+
+                    if (trafficLayerEnabled) {
+                        trafficOverlayLayers[busId].addTo(map);
+                    }
+                }
+
+                return trafficOverlayLayers[busId];
+            }
+
+            function drawBaseRoute(busId, history) {
+                if (!history || history.length < 2) return;
+
+                if (baseRouteLayers[busId]) {
+                    map.removeLayer(baseRouteLayers[busId]);
+                }
+
+                const points = simplifyPoints(history, 0.00012)
+                    .map(p => [p.latitude, p.longitude]);
+
+                baseRouteLayers[busId] = L.polyline(points, {
+                    color: "#7fa6c9",
+                    weight: 4,
+                    opacity: 0.45,
+                    lineCap: "round",
+                    lineJoin: "round"
+                }).addTo(map);
+            }
+
+            function drawTrafficOverlay(busId, history) {
+                if (!history || history.length < 2) return;
+
+                const layer = ensureTrafficOverlayLayer(busId);
+                layer.clearLayers();
+
+                const points = simplifyPoints(history, 0.00012);
+
+                let currentLevel = null;
+                let currentChunk = [];
+
+                function flushChunk() {
+                    if (!currentLevel || currentChunk.length < 2) {
+                        currentChunk = [];
+                        currentLevel = null;
+                        return;
+                    }
+
+                    const style = getTrafficOverlayStyle(currentLevel);
+                    if (!style) {
+                        currentChunk = [];
+                        currentLevel = null;
+                        return;
+                    }
+
+                    L.polyline(currentChunk, {
+                        color: style.color,
+                        weight: style.weight,
+                        opacity: style.opacity,
+                        lineCap: "round",
+                        lineJoin: "round"
+                    }).addTo(layer);
+
+                    currentChunk = [];
+                    currentLevel = null;
+                }
+
+                for (let i = 1; i < points.length; i++) {
+                    const prev = points[i - 1];
+                    const curr = points[i];
+
+                    const level = curr.trafficLevel;
+
+                    if (level !== "HIGH" && level !== "MEDIUM") {
+                        flushChunk();
+                        continue;
+                    }
+
+                    const prevLatLng = [prev.latitude, prev.longitude];
+                    const currLatLng = [curr.latitude, curr.longitude];
+
+                    if (currentLevel !== level) {
+                        flushChunk();
+                        currentLevel = level;
+                        currentChunk = [prevLatLng, currLatLng];
+                    } else {
+                        currentChunk.push(currLatLng);
+                    }
+                }
+
+                flushChunk();
+            }
+
+            function buildSparklineSvg(values, color = "#2ecc71", width = 240, height = 70) {
+                if (!values || values.length === 0) {
+                    return `
+                    <div style="color:#8bb8d8; font-size:13px;">
+                        No trend data
+                    </div>
+                `;
+                }
+
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const range = max - min || 1;
+
+                const points = values.map((value, index) => {
+                    const x = (index / (values.length - 1 || 1)) * width;
+                    const y = height - ((value - min) / range) * (height - 8) - 4;
+                    return `${x},${y}`;
+                }).join(" ");
+
+                return `
+                <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block; width:100%; height:auto;">
+                    <polyline
+                        fill="none"
+                        stroke="${color}"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        points="${points}"
+                    />
+                </svg>
+            `;
+            }
+
+            function buildEfficiencyGauge(score, label) {
+                const safeScore = Math.max(0, Math.min(100, Number(score) || 0));
+
+                let color = "#2ecc71";
+                if (safeScore < 50) {
+                    color = "#ff3b30";
+                } else if (safeScore < 75) {
+                    color = "#ff9f0a";
+                }
+
+                const centerX = 110;
+                const centerY = 110;
+                const radius = 72;
+
+                const angle = -180 + (safeScore / 100) * 180;
+                const radians = angle * Math.PI / 180;
+
+                const needleX = centerX + radius * 0.78 * Math.cos(radians);
+                const needleY = centerY + radius * 0.78 * Math.sin(radians);
+
+                return `
+            <div class="widget-title">Route Efficiency</div>
+
+            <div style="display:flex; justify-content:center; margin-top:4px;">
+                <svg width="220" height="140" viewBox="0 0 220 140">
+                    <path
+                        d="M 38 110 A 72 72 0 0 1 182 110"
+                        fill="none"
+                        stroke="rgba(255,255,255,0.10)"
+                        stroke-width="12"
+                        stroke-linecap="round"
+                    />
+                    <path
+                        d="M 38 110 A 72 72 0 0 1 182 110"
+                        fill="none"
+                        stroke="${color}"
+                        stroke-width="14"
+                        stroke-linecap="round"
+                        stroke-dasharray="${(safeScore / 100) * 226} 226"
+                    />
+
+                    <line
+                        x1="${centerX}"
+                        y1="${centerY}"
+                        x2="${needleX}"
+                        y2="${needleY}"
+                        stroke="#ffffff"
+                        stroke-width="3"
+                        stroke-linecap="round"
+                    />
+
+                    <circle cx="110" cy="110" r="6" fill="#ffffff" />
+
+                    <text
+                        x="110"
+                        y="82"
+                        text-anchor="middle"
+                        fill="#ffffff"
+                        font-size="26"
+                        font-weight="700"
+                    >
+                        ${safeScore.toFixed(1)}
+                    </text>
+
+                    <text x="30" y="125" fill="#8bb8d8" font-size="10">0</text>
+                    <text x="180" y="125" fill="#8bb8d8" font-size="10">100</text>
+
+                    <text
+                        x="110"
+                        y="110"
+                        text-anchor="middle"
+                        fill="#8bb8d8"
+                        font-size="12"
+                    >
+                        Efficiency Score
+                    </text>
+
+                    <text
+                        x="110"
+                        y="128"
+                        text-anchor="middle"
+                        fill="${color}"
+                        font-size="15"
+                        font-weight="700"
+                    >
+                        ${label}
+                    </text>
+                </svg>
+            </div>
+        `;
+            }
+
+            function ensurePerformanceTabStructure() {
+                const performanceTab = document.getElementById("performance-tab");
+
+                if (!document.getElementById("performance-summary-widget")) {
+                    performanceTab.innerHTML = `
+                    <div id="performance-summary-widget" class="widget-card"></div>
+
+                    <div id="speed-trend-widget" class="widget-card" style="min-height: 220px;">
+                        ${trendWidgetCache.speed}
+                    </div>
+
+                    <div id="passenger-trend-widget" class="widget-card" style="min-height: 220px;">
+                        ${trendWidgetCache.passengers}
+                    </div>
+                `;
+                }
+            }
+
+            function updatePerformanceSummary(avgSpeed, avgPassengers) {
+                ensurePerformanceTabStructure();
+
+                const summaryHtml = `
+                <div class="widget-title">Average Indicators</div>
+
+                <div class="metric-split">
+                    <div class="metric-label">Avg Speed</div>
+                    <div class="metric-value">${(avgSpeed * 3.6).toFixed(1)} km/h</div>
+                </div>
+
+                <div class="metric-split">
+                    <div class="metric-label">Avg Passengers</div>
+                    <div class="metric-value">${avgPassengers}</div>
+                </div>
+            `;
+
+                document.getElementById("performance-summary-widget").innerHTML = summaryHtml;
+                analyticsCache.performanceSummary = summaryHtml;
+            }
+
+            async function fetchBusTrends() {
+                try {
+                    ensurePerformanceTabStructure();
+
+                    const response = await fetch(
+                        `${API_BASE}/api/buses/trends?bus_id=${selectedBusId}&limit=20`
+                    );
+                    const data = await response.json();
+
+                    if (data.error) {
+                        trendWidgetCache.speed = `
+                        <div style="color:#8bb8d8; font-size:13px;">No speed trend data</div>
+                    `;
+                        trendWidgetCache.passengers = `
+                        <div style="color:#8bb8d8; font-size:13px;">No passenger trend data</div>
+                    `;
+                    } else {
+                        const speedSvg = buildSparklineSvg(data.speeds, "#00c2ff");
+                        const passengerSvg = buildSparklineSvg(data.passengers, "#2ecc71");
+
+                        const latestSpeed = data.speeds.length ? data.speeds[data.speeds.length - 1] : "-";
+                        const latestPassengers = data.passengers.length ? data.passengers[data.passengers.length - 1] : "-";
+
+                        const minSpeed = data.speeds.length ? Math.min(...data.speeds).toFixed(1) : "-";
+                        const maxSpeed = data.speeds.length ? Math.max(...data.speeds).toFixed(1) : "-";
+
+                        const minPassengers = data.passengers.length ? Math.min(...data.passengers) : "-";
+                        const maxPassengers = data.passengers.length ? Math.max(...data.passengers) : "-";
+
+                        trendWidgetCache.speed = `
+                        <div class="widget-title">Speed Trend</div>
+                        <div class="widget-value-lg">${latestSpeed} km/h</div>
+                        <div class="widget-subtle" style="margin-bottom:10px;">Recent movement speed</div>
+                        ${speedSvg}
+                        <div class="widget-subtle" style="margin-top:8px;">
+                            Min: ${minSpeed} km/h &nbsp; | &nbsp; Max: ${maxSpeed} km/h
+                        </div>
+                    `;
+
+                        trendWidgetCache.passengers = `
+                        <div class="widget-title">Passenger Trend</div>
+                        <div class="widget-value-lg">${latestPassengers}</div>
+                        <div class="widget-subtle" style="margin-bottom:10px;">Recent passenger load</div>
+                        ${passengerSvg}
+                        <div class="widget-subtle" style="margin-top:8px;">
+                            Min: ${minPassengers} &nbsp; | &nbsp; Max: ${maxPassengers}
+                        </div>
+                    `;
+                    }
+
+                    const speedWidget = document.getElementById("speed-trend-widget");
+                    const passengerWidget = document.getElementById("passenger-trend-widget");
+
+                    if (speedWidget) speedWidget.innerHTML = trendWidgetCache.speed;
+                    if (passengerWidget) passengerWidget.innerHTML = trendWidgetCache.passengers;
+                } catch (error) {
+                    console.error("Trend fetch error:", error);
+                }
+            }
+
+            async function loadBusHistoryOnce(busId) {
+                if (historyLoaded[busId]) return;
+
+                try {
+                    currentSegments[busId] = null;
+                    trafficStateMemory[busId] = null;
+
+                    const response = await fetch(`${API_BASE}/api/buses/history?bus_id=${busId}&limit=5000`);
+                    const history = await response.json();
+
+                    if (!Array.isArray(history) || history.length === 0) {
+                        historyLoaded[busId] = true;
+                        return;
+                    }
+
+                    const zones = detectProblemZones(busId, history);
+                    drawProblemZones(busId, zones);
+
+                    drawBaseRoute(busId, history);
+                    drawTrafficOverlay(busId, history);
+
+                    lastKnownPoints[busId] = history[history.length - 1];
+                    historyLoaded[busId] = true;
+                } catch (error) {
+                    console.error("Error loading initial history:", error);
+                }
+            }
+
+            function appendPointToRoute(bus) {
+                const busId = bus.busId;
+
+                const currentPoint = {
+                    latitude: bus.latitude,
+                    longitude: bus.longitude,
+                    trafficLevel: bus.trafficLevel
+                };
+
+                const lastPoint = lastKnownPoints[busId];
+
+                if (!lastPoint) {
+                    lastKnownPoints[busId] = currentPoint;
+                    return;
+                }
+
+                if (
+                    lastPoint.latitude === currentPoint.latitude &&
+                    lastPoint.longitude === currentPoint.longitude
+                ) {
+                    return;
+                }
+
+                const currentLatLng = [currentPoint.latitude, currentPoint.longitude];
+                const lastLatLng = [lastPoint.latitude, lastPoint.longitude];
+
+                // Extend clean base route live
+                if (baseRouteLayers[busId]) {
+                    baseRouteLayers[busId].addLatLng(currentLatLng);
+                }
+
+                // Add only problematic live traffic segments
+                const style = getTrafficOverlayStyle(currentPoint.trafficLevel);
+
+                if (style) {
+                    const layer = ensureTrafficOverlayLayer(busId);
+
+                    L.polyline([lastLatLng, currentLatLng], {
+                        color: style.color,
+                        weight: style.weight,
+                        opacity: style.opacity,
+                        lineCap: "round",
+                        lineJoin: "round"
+                    }).addTo(layer);
+                }
+
+                lastKnownPoints[busId] = currentPoint;
+            }
+
+            function renderStopsOnMap(stopsData) {
+                stopLayerGroup.clearLayers();
+                stopMarkers = {};
+
+                if (!stopsData || !Array.isArray(stopsData.stops)) return;
+
+                const currentIndex = stopsData.currentStopIndex;
+
+                stopsData.stops.forEach((stop, index) => {
+                    const isCurrent = index === currentIndex;
+                    const isNext = currentIndex !== null && index === currentIndex + 1;
+
+                    let className = "stop-square-marker";
+                    if (isCurrent) {
+                        className += " current";
+                    } else if (isNext) {
+                        className += " next";
+                    }
+
+                    const icon = L.divIcon({
+                        className: "",
+                        html: `<div class="${className}"></div>`,
+                        iconSize: isCurrent ? [14, 14] : isNext ? [13, 13] : [12, 12],
+                        iconAnchor: isCurrent ? [7, 7] : isNext ? [6.5, 6.5] : [6, 6]
+                    });
+
+                    const marker = L.marker([stop.latitude, stop.longitude], { icon });
+
+                    marker.bindPopup(`
+            <div style="font-family: Arial, sans-serif; min-width: 180px;">
+                <div style="font-size:16px; font-weight:700; margin-bottom:6px;">
+                    ${stop.name}
+                </div>
+                <div style="font-size:13px; line-height:1.5;">
+                    <b>Order:</b> ${stop.id}<br>
+                    <b>Lat:</b> ${stop.latitude}<br>
+                    <b>Lon:</b> ${stop.longitude}
+                </div>
+            </div>
+        `);
+
+                    marker.addTo(stopLayerGroup);
+                    stopMarkers[stop.id] = marker;
+                });
+            }
+            function clearBusActionBadge(busId) {
+                if (busActionBadges[busId]) {
+                    busBadgeLayerGroup.removeLayer(busActionBadges[busId]);
+                    delete busActionBadges[busId];
+                }
+            }
+
+            function getBadgeLatLng(bus) {
+                const lat = Number(bus.latitude);
+                const lon = Number(bus.longitude);
+
+                // small visual offset above the bus marker
+                const offsetMetersY = 45;
+                const dLat = offsetMetersY / 111320;
+
+                return [lat + dLat, lon];
+            }
+
+            function drawBusActionBadge(bus) {
+                const busId = bus.busId;
+
+                clearBusActionBadge(busId);
+
+                const isStopping = bus.eventType === "STOP" || bus.doorStatus === "OPEN";
+
+                if (!isStopping) {
+                    return;
+                }
+
+                const boarding = Number(bus.boardingCount || 0);
+                const alighting = Number(bus.alightingCount || 0);
+                const waiting = Number(bus.waitingPassengers || 0);
+                const dwell = Number(bus.dwellRemaining || 0);
+
+                const stopName = bus.currentStopName || "Bus stop";
+
+                const html = `
+        <div class="bus-action-badge">
+            <div class="bus-action-badge-title">🚪 Door OPEN</div>
+
+            <div style="font-weight:700; margin-bottom:4px;">
+                ${stopName}
+            </div>
+
+            <div class="bus-action-badge-row">
+                <span>Boarded</span>
+                <span class="bus-action-badge-good">+${boarding}</span>
+            </div>
+
+            <div class="bus-action-badge-row">
+                <span>Alighted</span>
+                <span class="bus-action-badge-bad">-${alighting}</span>
+            </div>
+
+            <div class="bus-action-badge-row">
+                <span>Unserved queue</span>
+                <span class="bus-action-badge-waiting">${waiting}</span>
+            </div>
+
+            <div class="bus-action-badge-row">
+                <span>Dwell</span>
+                <span>${dwell}s</span>
+            </div>
+        </div>
+    `;
+
+                const icon = L.divIcon({
+                    className: "",
+                    html,
+                    iconSize: [150, 95],
+                    iconAnchor: [75, 105]
+                });
+
+                const badge = L.marker(getBadgeLatLng(bus), {
+                    icon,
+                    interactive: false
+                });
+
+                badge.addTo(busBadgeLayerGroup);
+                busActionBadges[busId] = badge;
+            }
+
+            function clearDecisionVisual(busId) {
+                stopSupportBusAnimation(busId);
+
+                if (decisionVisuals[busId]) {
+                    decisionLayerGroup.removeLayer(decisionVisuals[busId]);
+                    delete decisionVisuals[busId];
+                }
+
+                if (decisionVisualKeys[busId]) {
+                    delete decisionVisualKeys[busId];
+                }
+            }
+
+            function offsetLatLng(lat, lon, metersX, metersY) {
+                const dLat = metersY / 111320;
+                const dLon = metersX / (111320 * Math.cos(lat * Math.PI / 180));
+
+                return [lat + dLat, lon + dLon];
+            }
+
+            function getDecisionLabelTopLeftLatLng(targetLatLng) {
+                const mapSize = map.getSize();
+                const targetPoint = map.latLngToContainerPoint(
+                    L.latLng(targetLatLng[0], targetLatLng[1])
+                );
+
+                const cardWidth = 245;
+                const cardHeight = 205;
+                const margin = 24;
+
+                // Prefer placing the card above-right of the problem stop.
+                let left = targetPoint.x + 34;
+                let top = targetPoint.y - cardHeight - 34;
+
+                // If it would collide with the right side / weather widget, move it left.
+                if (left + cardWidth > mapSize.x - margin) {
+                    left = targetPoint.x - cardWidth - 34;
+                }
+
+                // Keep inside the visible map area.
+                if (left < margin) {
+                    left = margin;
+                }
+
+                if (top < margin) {
+                    top = targetPoint.y + 48;
+                }
+
+                if (top + cardHeight > mapSize.y - margin) {
+                    top = Math.max(margin, mapSize.y - cardHeight - margin);
+                }
+
+                const latLng = map.containerPointToLatLng(L.point(left, top));
+                return [latLng.lat, latLng.lng];
+            }
+
+            function calculateDistanceKm(fromLatLng, toLatLng) {
+                const earthRadiusKm = 6371;
+                const lat1 = Number(fromLatLng[0]) * Math.PI / 180;
+                const lat2 = Number(toLatLng[0]) * Math.PI / 180;
+                const deltaLat = (Number(toLatLng[0]) - Number(fromLatLng[0])) * Math.PI / 180;
+                const deltaLon = (Number(toLatLng[1]) - Number(fromLatLng[1])) * Math.PI / 180;
+
+                const a =
+                    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                    Math.cos(lat1) * Math.cos(lat2) *
+                    Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+                return earthRadiusKm * c;
+            }
+
+            function calculatePathDistanceKm(pathLatLngs) {
+                if (!Array.isArray(pathLatLngs) || pathLatLngs.length < 2) {
+                    return 0;
+                }
+
+                let total = 0;
+
+                for (let i = 1; i < pathLatLngs.length; i++) {
+                    total += calculateDistanceKm(pathLatLngs[i - 1], pathLatLngs[i]);
+                }
+
+                return total;
+            }
+
+            function calculateSupportImpactByDistance(distanceKm, unservedQueue) {
+                const travelMinutes = Math.ceil(
+                    (distanceKm / SUPPORT_DECISION.supportBusAverageSpeedKmh) * 60
+                );
+
+                const etaMinutes = Math.max(
+                    1,
+                    travelMinutes + SUPPORT_DECISION.dispatchPreparationMinutes
+                );
+
+                const supportCapacity = SUPPORT_DECISION.supportBusCapacity;
+                const servedPassengers = Math.min(unservedQueue, supportCapacity);
+                const queueAfterSupport = Math.max(0, unservedQueue - supportCapacity);
+                const waitingReductionMinutes = Math.max(
+                    0,
+                    SUPPORT_DECISION.nextRegularBusEtaMinutes - etaMinutes
+                );
+
+                let impactText = "Unserved cleared";
+                if (queueAfterSupport > 0) {
+                    impactText = "Unserved reduced";
+                }
+
+                return {
+                    distanceKm,
+                    etaMinutes,
+                    supportCapacity,
+                    servedPassengers,
+                    queueAfterSupport,
+                    waitingReductionMinutes,
+                    impactText
+                };
+            }
+
+            function calculateSupportImpact(depotLatLng, targetLatLng, unservedQueue, pathDistanceKm = null) {
+                const distanceKm = Number.isFinite(pathDistanceKm)
+                    ? pathDistanceKm
+                    : calculateDistanceKm(depotLatLng, targetLatLng);
+
+                return calculateSupportImpactByDistance(distanceKm, unservedQueue);
+            }
+
+            async function loadSupportRouteShape() {
+                if (supportRouteShapeLoading || supportRouteShape.length > 0) {
+                    return supportRouteShape;
+                }
+
+                supportRouteShapeLoading = true;
+
+                try {
+                    const response = await fetch(SUPPORT_DECISION.routeShapeFile);
+
+                    if (!response.ok) {
+                        throw new Error(`Route shape file not found: ${SUPPORT_DECISION.routeShapeFile}`);
+                    }
+
+                    const csvText = await response.text();
+                    const lines = csvText
+                        .split(/\r?\n/)
+                        .map(line => line.trim())
+                        .filter(Boolean);
+
+                    if (lines.length < 2) {
+                        throw new Error("Route shape CSV is empty");
+                    }
+
+                    const delimiter = lines[0].includes(";") ? ";" : ",";
+                    const headers = lines[0]
+                        .replace(/^\uFEFF/, "")
+                        .split(delimiter)
+                        .map(header => header.trim().toLowerCase());
+
+                    const latIndex = headers.indexOf("latitude");
+                    const lonIndex = headers.indexOf("longitude");
+                    const sequenceIndex = headers.indexOf("point_sequence");
+
+                    if (latIndex === -1 || lonIndex === -1) {
+                        throw new Error("Route shape CSV must contain latitude and longitude columns");
+                    }
+
+                    supportRouteShape = lines.slice(1)
+                        .map((line, index) => {
+                            const cells = line.split(delimiter).map(cell => cell.trim());
+
+                            return {
+                                pointSequence: sequenceIndex >= 0
+                                    ? Number(cells[sequenceIndex])
+                                    : index,
+                                latitude: Number(cells[latIndex]),
+                                longitude: Number(cells[lonIndex])
+                            };
+                        })
+                        .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+                        .sort((a, b) => a.pointSequence - b.pointSequence);
+
+                    console.log(`Support route shape loaded: ${supportRouteShape.length} points`);
+                } catch (error) {
+                    console.warn("Support route shape loading failed:", error);
+                    supportRouteShape = [];
+                } finally {
+                    supportRouteShapeLoading = false;
+                }
+
+                return supportRouteShape;
+            }
+
+            function findNearestSupportShapeIndex(latLng) {
+                if (!supportRouteShape.length) {
+                    return -1;
+                }
+
+                let bestIndex = 0;
+                let bestDistance = Infinity;
+
+                supportRouteShape.forEach((point, index) => {
+                    const distance = calculateDistanceKm(
+                        [point.latitude, point.longitude],
+                        latLng
+                    );
+
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestIndex = index;
+                    }
+                });
+
+                return bestIndex;
+            }
+
+            function getSupportReserveShapeCandidates() {
+                if (!supportRouteShape.length) {
+                    return [0];
+                }
+
+                const maxIndex = supportRouteShape.length - 1;
+                const fractions = SUPPORT_DECISION.reserveRouteFractions || [0];
+
+                return [...new Set(
+                    fractions.map(fraction => {
+                        const index = Math.round(maxIndex * Number(fraction));
+                        return Math.max(0, Math.min(maxIndex, index));
+                    })
+                )].sort((a, b) => a - b);
+            }
+
+            function chooseSupportReserveShapeIndex(targetShapeIndex) {
+                if (!supportRouteShape.length) {
+                    return 0;
+                }
+
+                const minGap = Number(SUPPORT_DECISION.minUpstreamShapePoints || 0);
+                const upstreamLimit = Number(targetShapeIndex) - minGap;
+                const candidates = getSupportReserveShapeCandidates();
+
+                const upstreamCandidates = candidates.filter(index => index <= upstreamLimit);
+
+                let selectedIndex = null;
+
+                if (upstreamCandidates.length > 0) {
+                    selectedIndex = upstreamCandidates[upstreamCandidates.length - 1];
+                } else {
+                    const fallbackLookback = Number(SUPPORT_DECISION.fallbackLookbackShapePoints || 80);
+                    selectedIndex = Math.max(0, Number(targetShapeIndex) - fallbackLookback);
+                }
+
+                const maxDistance = Number(SUPPORT_DECISION.maxNamedReserveDistanceShapePoints || 95);
+                const distancePoints = Number(targetShapeIndex) - Number(selectedIndex);
+
+                if (distancePoints > maxDistance) {
+                    const dynamicLookback = Number(SUPPORT_DECISION.dynamicLookbackShapePoints || 55);
+                    return Math.max(0, Number(targetShapeIndex) - dynamicLookback);
+                }
+
+                return selectedIndex;
+            }
+
+            function getSupportPathInfo(targetLatLng) {
+                if (!supportRouteShape.length) {
+                    const depotLatLng = [
+                        SUPPORT_DECISION.depot.latitude,
+                        SUPPORT_DECISION.depot.longitude
+                    ];
+
+                    return {
+                        hasRouteShape: false,
+                        originLatLng: depotLatLng,
+                        targetLatLng,
+                        pathLatLngs: [],
+                        distanceKm: calculateDistanceKm(depotLatLng, targetLatLng)
+                    };
+                }
+
+                const targetIndex = findNearestSupportShapeIndex(targetLatLng);
+                const safeTargetIndex = targetIndex >= 0 ? targetIndex : 0;
+                const reserveIndex = chooseSupportReserveShapeIndex(safeTargetIndex);
+
+                const startIndex = Math.min(reserveIndex, safeTargetIndex);
+                const endIndex = Math.max(reserveIndex, safeTargetIndex);
+
+                let segment = supportRouteShape
+                    .slice(startIndex, endIndex + 1)
+                    .map(point => [point.latitude, point.longitude]);
+
+                if (safeTargetIndex < reserveIndex) {
+                    segment = segment.reverse();
+                }
+
+                if (segment.length === 0) {
+                    segment = [[
+                        supportRouteShape[reserveIndex].latitude,
+                        supportRouteShape[reserveIndex].longitude
+                    ]];
+                }
+
+                // Snap the last point to the actual overloaded stop/bus location for visual precision.
+                if (segment.length > 0) {
+                    segment[segment.length - 1] = targetLatLng;
+                }
+
+                const originLatLng = segment[0];
+
+                return {
+                    hasRouteShape: true,
+                    originLatLng,
+                    targetLatLng,
+                    pathLatLngs: segment,
+                    distanceKm: calculatePathDistanceKm(segment)
+                };
+            }
+
+            function interpolateLatLng(fromLatLng, toLatLng, t) {
+                return [
+                    fromLatLng[0] + (toLatLng[0] - fromLatLng[0]) * t,
+                    fromLatLng[1] + (toLatLng[1] - fromLatLng[1]) * t
+                ];
+            }
+
+            function buildAnimatedSupportPath(pathLatLngs, stepMeters = 35) {
+                if (!Array.isArray(pathLatLngs) || pathLatLngs.length < 2) {
+                    return pathLatLngs || [];
+                }
+
+                const animatedPath = [pathLatLngs[0]];
+
+                for (let i = 1; i < pathLatLngs.length; i++) {
+                    const fromLatLng = pathLatLngs[i - 1];
+                    const toLatLng = pathLatLngs[i];
+                    const distanceMeters = calculateDistanceKm(fromLatLng, toLatLng) * 1000;
+                    const steps = Math.max(1, Math.ceil(distanceMeters / stepMeters));
+
+                    for (let step = 1; step <= steps; step++) {
+                        animatedPath.push(interpolateLatLng(fromLatLng, toLatLng, step / steps));
+                    }
+                }
+
+                return animatedPath;
+            }
+
+            function startSupportBusAnimation(busId, supportMarker, pathLatLngs) {
+                if (!Array.isArray(pathLatLngs) || pathLatLngs.length < 2) {
+                    return;
+                }
+
+                const animatedPath = buildAnimatedSupportPath(pathLatLngs, 35);
+
+                if (animatedPath.length < 2) {
+                    return;
+                }
+
+                let index = 0;
+                supportMarker.setLatLng(animatedPath[0]);
+
+                supportAnimationTimers[busId] = setInterval(() => {
+                    index += 1;
+
+                    if (index >= animatedPath.length) {
+                        supportMarker.setLatLng(animatedPath[animatedPath.length - 1]);
+                        clearInterval(supportAnimationTimers[busId]);
+                        supportAnimationTimers[busId] = null;
+                        return;
+                    }
+
+                    supportMarker.setLatLng(animatedPath[index]);
+                }, 120);
+            }
+
+            function stopSupportBusAnimation(busId) {
+                if (supportAnimationTimers[busId]) {
+                    clearInterval(supportAnimationTimers[busId]);
+                    supportAnimationTimers[busId] = null;
+                }
+            }
+
+            function getSupportImpactClass(queueAfterSupport) {
+                return queueAfterSupport === 0 ? "dispatch-label-good" : "dispatch-label-bad";
+            }
+
+            function getSupportDecisionType(bus) {
+                const isAtStop = bus.eventType === "STOP" || bus.doorStatus === "OPEN";
+                const passengers = Number(bus.passengerCount || 0);
+                const unservedQueue = Number(bus.waitingPassengers || 0);
+
+                if (!isAtStop) {
+                    return "NORMAL";
+                }
+
+                const isFull = passengers >= SUPPORT_DECISION.busCapacity;
+                const hasUnservedQueue = unservedQueue >= SUPPORT_DECISION.minRouteQueue;
+
+                if (isFull && hasUnservedQueue) {
+                    const targetLatLng = [Number(bus.latitude), Number(bus.longitude)];
+                    const supportPathInfo = getSupportPathInfo(targetLatLng);
+                    const impact = calculateSupportImpactByDistance(
+                        supportPathInfo.distanceKm,
+                        unservedQueue
+                    );
+
+                    if (impact.etaMinutes < SUPPORT_DECISION.nextRegularBusEtaMinutes) {
+                        return "DISPATCH_SUPPORT_BUS";
+                    }
+
+                    return "REGULAR_BUS_MONITOR";
+                }
+
+                if (isFull) {
+                    return "FULL_BUS_MONITOR";
+                }
+
+                if (hasUnservedQueue) {
+                    return "QUEUE_MONITOR";
+                }
+
+                return "NORMAL";
+            }
+
+            function drawDecisionVisual(bus) {
+                const busId = bus.busId;
+                const decisionType = getSupportDecisionType(bus);
+
+                if (decisionType === "NORMAL") {
+                    clearDecisionVisual(busId);
+                    return;
+                }
+
+                const busLatLng = [Number(bus.latitude), Number(bus.longitude)];
+                const decisionKey = [
+                    decisionType,
+                    bus.currentStopName || "",
+                    Math.round(busLatLng[0] * 100000),
+                    Math.round(busLatLng[1] * 100000)
+                ].join("|");
+
+                if (decisionVisuals[busId] && decisionVisualKeys[busId] === decisionKey) {
+                    return;
+                }
+
+                clearDecisionVisual(busId);
+
+                const layer = L.layerGroup().addTo(decisionLayerGroup);
+                decisionVisuals[busId] = layer;
+                decisionVisualKeys[busId] = decisionKey;
+
+                if (decisionType === "FULL_BUS_MONITOR" || decisionType === "QUEUE_MONITOR" || decisionType === "REGULAR_BUS_MONITOR") {
+                    const color = decisionType === "FULL_BUS_MONITOR" ? "#ff3b30" : "#ff9f0a";
+
+                    L.circle(busLatLng, {
+                        radius: 95,
+                        color,
+                        fillColor: color,
+                        fillOpacity: 0.13,
+                        weight: 2,
+                        opacity: 0.85
+                    }).addTo(layer);
+
+                    return;
+                }
+
+                if (decisionType !== "DISPATCH_SUPPORT_BUS") {
+                    return;
+                }
+
+                const depotLatLng = [
+                    SUPPORT_DECISION.depot.latitude,
+                    SUPPORT_DECISION.depot.longitude
+                ];
+
+                const targetLatLng = busLatLng;
+                const supportPathInfo = getSupportPathInfo(targetLatLng);
+                const supportOriginLatLng = supportPathInfo.originLatLng;
+                const labelLatLng = getDecisionLabelTopLeftLatLng(targetLatLng);
+
+                const riskCircle = L.circle(targetLatLng, {
+                    radius: 130,
+                    color: "#ff3b30",
+                    fillColor: "#ff3b30",
+                    fillOpacity: 0.14,
+                    weight: 2,
+                    opacity: 0.9
+                });
+
+                const targetIcon = L.divIcon({
+                    className: "",
+                    html: `<div class="dispatch-target-marker">!</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                });
+
+                const targetMarker = L.marker(targetLatLng, {
+                    icon: targetIcon,
+                    interactive: false
+                });
+
+                let actualSupportPathLine = null;
+
+                if (supportPathInfo.hasRouteShape && supportPathInfo.pathLatLngs.length >= 2) {
+                    actualSupportPathLine = L.polyline(
+                        supportPathInfo.pathLatLngs,
+                        {
+                            color: "#00e676",
+                            weight: 5,
+                            opacity: 0.82,
+                            lineCap: "round",
+                            lineJoin: "round"
+                        }
+                    );
+                }
+
+                const unservedQueue = Number(bus.waitingPassengers || 0);
+                const impact = calculateSupportImpactByDistance(
+                    supportPathInfo.distanceKm,
+                    unservedQueue
+                );
+
+                const labelHtml = `
+        <div class="dispatch-label">
+            <div class="dispatch-label-title">Support Bus Recommended</div>
+
+            <div style="font-weight:800; margin-bottom:5px;">
+                ${bus.currentStopName || "Current stop"}
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Reason</span>
+                <span class="dispatch-label-bad">Capacity full</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Passengers</span>
+                <span>${bus.passengerCount}/${SUPPORT_DECISION.busCapacity}</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Unserved queue</span>
+                <span class="dispatch-label-bad">${unservedQueue}</span>
+            </div>
+
+            <div style="height:1px; background:rgba(0,0,0,0.12); margin:6px 0;"></div>
+
+            <div class="dispatch-label-row">
+                <span>Next regular bus</span>
+                <span>${SUPPORT_DECISION.nextRegularBusEtaMinutes} min</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Support ETA</span>
+                <span>${impact.etaMinutes} min</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Route path</span>
+                <span>${impact.distanceKm.toFixed(1)} km</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Origin</span>
+                <span>nearby standby</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Support capacity</span>
+                <span>${impact.supportCapacity}</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Queue after</span>
+                <span class="${getSupportImpactClass(impact.queueAfterSupport)}">${impact.queueAfterSupport}</span>
+            </div>
+
+            <div class="dispatch-label-row">
+                <span>Wait reduced</span>
+                <span class="dispatch-label-good">${impact.waitingReductionMinutes} min</span>
+            </div>
+        </div>
+    `;
+
+                const labelIcon = L.divIcon({
+                    className: "",
+                    html: labelHtml,
+                    iconSize: [245, 205],
+                    iconAnchor: [0, 0]
+                });
+
+                const labelMarker = L.marker(labelLatLng, {
+                    icon: labelIcon,
+                    interactive: false
+                });
+
+                riskCircle.addTo(layer);
+                if (actualSupportPathLine) {
+                    actualSupportPathLine.addTo(layer);
+                }
+                targetMarker.addTo(layer);
+                labelMarker.addTo(layer);
+            }
+
+            function ensureBusOption(busId) {
+                const select = document.getElementById("bus-select");
+                if (!select) return;
+
+                const exists = Array.from(select.options).some(option => option.value === busId);
+                if (exists) return;
+
+                const option = document.createElement("option");
+                option.value = busId;
+                option.textContent = busId;
+                select.appendChild(option);
+            }
+
+            async function fetchBuses() {
+                if (isFetchingBuses) return;
+                isFetchingBuses = true;
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/buses/latest`);
+                    const data = await response.json();
+
+                    for (const bus of data) {
+                        ensureBusOption(bus.busId);
+
+                        const lat = bus.latitude;
+                        const lon = bus.longitude;
+                        const popupContent = buildPopup(bus);
+
+                        await loadBusHistoryOnce(bus.busId);
+
+                        if (markers[bus.busId]) {
+                            markers[bus.busId].setLatLng([lat, lon]);
+                            markers[bus.busId].setIcon(getBusIcon(bus));
+                            markers[bus.busId].setPopupContent(popupContent);
+                        } else {
+                            const marker = L.marker([lat, lon], {
+                                icon: getBusIcon(bus)
+                            }).addTo(map);
+
+                            marker.bindPopup(popupContent);
+
+                            marker.on("click", () => {
+                                selectedBusId = bus.busId;
+
+                                trendWidgetCache.speed = `<div style="color:#8bb8d8; font-size:13px;">Loading speed trend...</div>`;
+                                trendWidgetCache.passengers = `<div style="color:#8bb8d8; font-size:13px;">Loading passenger trend...</div>`;
+
+                                ensurePerformanceTabStructure();
+                                document.getElementById("speed-trend-widget").innerHTML = trendWidgetCache.speed;
+                                document.getElementById("passenger-trend-widget").innerHTML = trendWidgetCache.passengers;
+
+                                refreshSelectedBusPanel();
+                                map.setView(marker.getLatLng(), 14);
+                                marker.openPopup();
+
+                                setTimeout(fetchBusTrends, 150);
+                            });
+
+                            markers[bus.busId] = marker;
+                        }
+
+                        appendPointToRoute(bus);
+
+                        if (bus.busId === selectedBusId) {
+                            const decisionType = getSupportDecisionType(bus);
+
+                            if (decisionType === "DISPATCH_SUPPORT_BUS") {
+                                clearBusActionBadge(bus.busId);
+                            } else {
+                                drawBusActionBadge(bus);
+                            }
+
+                            drawDecisionVisual(bus);
+                        } else if (isSupportBus(bus)) {
+                            // Support buses are real vehicles now.
+                            // Show boarding/alighting badge when they stop, even if Bus_1 is selected.
+                            drawBusActionBadge(bus);
+                            clearDecisionVisual(bus.busId);
+                        } else {
+                            clearBusActionBadge(bus.busId);
+                            clearDecisionVisual(bus.busId);
+                        }
+
+                    }
+                } catch (error) {
+                    console.error("Error fetching latest bus data:", error);
+                } finally {
+                    isFetchingBuses = false;
+                }
+            }
+
+            async function fetchAnalytics() {
+                try {
+                    const analyticsResponse = await fetch(
+                        `${API_BASE}/api/buses/analytics?bus_id=${selectedBusId}`
+                    );
+                    const data = await analyticsResponse.json();
+
+                    if (data.error) {
+                        if (analyticsCache.overview) {
+                            document.getElementById("overview-tab").innerHTML = analyticsCache.overview;
+                        }
+                        if (analyticsCache.events) {
+                            document.getElementById("events-tab").innerHTML = analyticsCache.events;
+                        }
+                        if (analyticsCache.performanceSummary) {
+                            updatePerformanceSummaryFromCache();
+                        }
+                        return;
+                    }
+
+                    let operationalInsight = "Stable movement with normal operating conditions.";
+
+                    if (data.operationalStatus === "CONGESTED") {
+                        operationalInsight = "Congestion is currently affecting route movement.";
+                    } else if (data.operationalStatus === "CROWDED") {
+                        operationalInsight = "Passenger load is high and may affect service comfort.";
+                    } else if (data.delayRisk === "HIGH") {
+                        operationalInsight = "High delay risk due to traffic exposure and stop frequency.";
+                    } else if (data.delayRisk === "MEDIUM") {
+                        operationalInsight = "Moderate delay risk detected on the current route.";
+                    } else if (data.eventDistribution.TRAFFIC >= 10) {
+                        operationalInsight = "Frequent traffic interruptions are present on this route.";
+                    } else if (data.eventDistribution.STOP >= 10) {
+                        operationalInsight = "Stop-heavy movement pattern is affecting route flow.";
+                    } else if (data.routeEfficiencyLabel === "GOOD") {
+                        operationalInsight = "Route performance is currently efficient and stable.";
+                    } else if (data.routeEfficiencyLabel === "MODERATE") {
+                        operationalInsight = "Route performance is moderate with some operational friction.";
+                    }
+
+                    const overviewHtml = `
+            <div class="widget-card">
+                <div class="widget-title">Current State</div>
+
+                <div class="status-grid">
+                    <div class="status-tile">
+                        <div class="status-label">Delay Risk</div>
+                        <div class="status-value ${getStatusClass('delay', data.delayRisk)}">
+                            ${data.delayRisk}
+                        </div>
+                    </div>
+
+                    <div class="status-tile">
+                        <div class="status-label">Operation</div>
+                        <div class="status-value ${getStatusClass('operation', data.operationalStatus)}">
+                            ${data.operationalStatus}
+                        </div>
+                    </div>
+
+                    <div class="status-tile">
+                        <div class="status-label">Traffic</div>
+                        <div class="status-value ${getStatusClass('traffic', data.currentTrafficLevel)}">
+                            ${data.currentTrafficLevel}
+                        </div>
+                    </div>
+
+                    <div class="status-tile">
+                        <div class="status-label">Event</div>
+                        <div class="status-value ${getStatusClass('event', data.currentEventType)}">
+                            ${data.currentEventType}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="widget-card">
+                ${buildEfficiencyGauge(data.routeEfficiencyScore, data.routeEfficiencyLabel)}
+            </div>
+        `;
+
+                    const eventsHtml = `
+            <div class="widget-card">
+                <div class="widget-title">Event Distribution</div>
+
+                <div class="metric-label">Moving (${data.eventDistribution.MOVING}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.eventDistribution.MOVING}%; background:#2ecc71;"></div>
+                </div>
+
+                <div class="metric-label">Traffic (${data.eventDistribution.TRAFFIC}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.eventDistribution.TRAFFIC}%; background:#ff3b30;"></div>
+                </div>
+
+                <div class="metric-label">Stop (${data.eventDistribution.STOP}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.eventDistribution.STOP}%; background:#f1c40f;"></div>
+                </div>
+
+                <div class="metric-label">Idle (${data.eventDistribution.IDLE}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.eventDistribution.IDLE}%; background:#ff9f0a;"></div>
+                </div>
+            </div>
+
+            <div class="widget-card">
+                <div class="widget-title">Traffic Distribution</div>
+
+                <div class="metric-label">Low Traffic (${data.trafficDistribution.LOW}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.trafficDistribution.LOW}%; background:#2ecc71;"></div>
+                </div>
+
+                <div class="metric-label">Medium Traffic (${data.trafficDistribution.MEDIUM}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.trafficDistribution.MEDIUM}%; background:#ff9f0a;"></div>
+                </div>
+
+                <div class="metric-label">High Traffic (${data.trafficDistribution.HIGH}%)</div>
+                <div class="traffic-bar">
+                    <div class="traffic-fill" style="width:${data.trafficDistribution.HIGH}%; background:#ff3b30;"></div>
+                </div>
+            </div>
+
+            <div class="widget-card">
+                <div class="widget-title">Operational Insight</div>
+                <div>${operationalInsight}</div>
+            </div>
+        `;
+
+                    document.getElementById("overview-tab").innerHTML = overviewHtml;
+                    document.getElementById("events-tab").innerHTML = eventsHtml;
+
+                    analyticsCache.overview = overviewHtml;
+                    analyticsCache.events = eventsHtml;
+
+                    updatePerformanceSummary(data.avgSpeed, data.avgPassengers);
+                } catch (err) {
+                    console.error("Analytics error:", err);
+
+                    if (analyticsCache.overview) {
+                        document.getElementById("overview-tab").innerHTML = analyticsCache.overview;
+                    }
+
+                    if (analyticsCache.events) {
+                        document.getElementById("events-tab").innerHTML = analyticsCache.events;
+                    }
+
+                    if (analyticsCache.performanceSummary) {
+                        updatePerformanceSummaryFromCache();
+                    }
+                }
+            }
+
+            function updatePerformanceSummaryFromCache() {
+                ensurePerformanceTabStructure();
+                document.getElementById("performance-summary-widget").innerHTML = analyticsCache.performanceSummary;
+            }
+
+            async function fetchOverviewMetrics() {
+                try {
+                    const response = await fetch(`${API_BASE}/api/system/overview`);
+                    const data = await response.json();
+
+                    if (data.error) return;
+
+                    document.getElementById("metric-active-buses").textContent = data.activeBuses;
+                    document.getElementById("metric-routes").textContent = data.routes;
+                    document.getElementById("metric-avg-speed").textContent = `${(data.avgNetworkSpeed * 3.6).toFixed(1)} km/h`;
+                    document.getElementById("metric-traffic-buses").textContent = data.highTrafficBusesCount;
+                    document.getElementById("metric-overcrowded-buses").textContent = data.overcrowdedBusesCount;
+                    document.getElementById("metric-mode").textContent = data.mode;
+
+                    const highTrafficList = data.highTrafficBusIds.length
+                        ? data.highTrafficBusIds.join(", ")
+                        : "None";
+
+                    const overcrowdedList = data.overcrowdedBusIds.length
+                        ? data.overcrowdedBusIds.join(", ")
+                        : "None";
+
+                    const trafficDetailEl = document.getElementById("metric-traffic-buses-detail");
+                    const overcrowdedDetailEl = document.getElementById("metric-overcrowded-buses-detail");
+
+                    if (trafficDetailEl) {
+                        trafficDetailEl.textContent = highTrafficList;
+                    }
+
+                    if (overcrowdedDetailEl) {
+                        overcrowdedDetailEl.textContent = overcrowdedList;
+                    }
+                } catch (error) {
+                    console.error("Overview metrics error:", error);
+                }
+            }
+
+            function renderRouteProgressWidget(stopsData) {
+                const container = document.getElementById("route-progress-widget");
+                if (!container) return;
+
+                if (!stopsData || !Array.isArray(stopsData.stops) || stopsData.stops.length === 0) {
+                    container.innerHTML = `<div class="widget-subtle">No stop data available.</div>`;
+                    return;
+                }
+
+                const previousStop = stopsData.previousStopName || "—";
+                const currentStop = stopsData.currentStopName || "—";
+                const nextStop = stopsData.nextStopName || "—";
+
+                const stopListHtml = stopsData.stops.map((stop, index) => {
+                    let rowColor = "#dfefff";
+                    let markerColor = "#d9f7c8";
+                    let badge = "";
+
+                    if (index === stopsData.currentStopIndex) {
+                        rowColor = "#00c2ff";
+                        markerColor = "#00c2ff";
+                        badge = ` <span style="color:#00c2ff;">• current</span>`;
+                    } else if (stopsData.currentStopIndex !== null && index === stopsData.currentStopIndex + 1) {
+                        rowColor = "#77e66a";
+                        markerColor = "#77e66a";
+                        badge = ` <span style="color:#77e66a;">• next</span>`;
+                    }
+
+                    return `
+            <div style="
+                display:flex;
+                align-items:flex-start;
+                gap:10px;
+                padding:7px 0;
+                border-bottom:1px solid rgba(120,170,220,0.08);
+                color:${rowColor};
+            ">
+                <div style="
+                    width:10px;
+                    height:10px;
+                    margin-top:6px;
+                    border-radius:2px;
+                    background:${markerColor};
+                    border:1px solid rgba(255,255,255,0.85);
+                    flex-shrink:0;
+                "></div>
+
+                <div style="line-height:1.45;">
+                    <span style="font-weight:700;">${stop.id}.</span> ${stop.name}${badge}
+                </div>
+            </div>
+        `;
+                }).join("");
+
+                container.innerHTML = `
+        <div class="widget-card" style="margin-bottom:0;">
+            <div class="widget-title">Selected Bus Route Context</div>
+
+            <div class="route-metric-row">
+                <div class="route-metric-label">Previous stop</div>
+                <div class="route-metric-value">${previousStop}</div>
+            </div>
+
+            <div class="route-metric-row">
+                <div class="route-metric-label">Current / nearest</div>
+                <div class="route-metric-value">${currentStop}</div>
+            </div>
+
+            <div class="route-metric-row">
+                <div class="route-metric-label">Next stop</div>
+                <div class="route-metric-value">${nextStop}</div>
+            </div>
+
+            <button id="route-toggle-btn" class="route-toggle-btn">bus stop routes</button>
+
+            <div id="route-stops-panel" class="route-stops-panel">
+                <div class="widget-card" style="max-height:300px; overflow-y:auto; margin-top:12px; margin-bottom:0;">
+                    <div class="widget-title">Stops</div>
+                    ${stopListHtml}
+                </div>
+            </div>
+        </div>
+    `;
+
+                const toggleBtn = document.getElementById("route-toggle-btn");
+                const stopsPanel = document.getElementById("route-stops-panel");
+
+                if (toggleBtn && stopsPanel) {
+                    toggleBtn.addEventListener("click", () => {
+                        stopsPanel.classList.toggle("open");
+                        refreshMapLayout();
+                    });
+                }
+            }
+            window.addEventListener("resize", () => {
+                refreshMapLayout();
+            });
+
+            async function fetchBusStops() {
+                try {
+                    const response = await fetch(`${API_BASE}/api/buses/stops?bus_id=${selectedBusId}`);
+                    const data = await response.json();
+
+                    renderRouteProgressWidget(data);
+                    renderStopsOnMap(data);
+                } catch (error) {
+                    console.error("Stops fetch error:", error);
+
+                    const container = document.getElementById("route-progress-widget");
+                    if (container) {
+                        container.innerHTML = `<div class="widget-subtle">Failed to load stop data.</div>`;
+                    }
+                }
+            }
+
+            function refreshSelectedBusPanel() {
+                document.getElementById("bus-select").value = selectedBusId;
+                fetchAnalytics();
+                fetchBusStops();
+            }
+
+            document.getElementById("bus-select").addEventListener("change", (e) => {
+                selectedBusId = e.target.value;
+
+                trendWidgetCache.speed = `<div style="color:#8bb8d8; font-size:13px;">Loading speed trend...</div>`;
+                trendWidgetCache.passengers = `<div style="color:#8bb8d8; font-size:13px;">Loading passenger trend...</div>`;
+
+                ensurePerformanceTabStructure();
+                document.getElementById("speed-trend-widget").innerHTML = trendWidgetCache.speed;
+                document.getElementById("passenger-trend-widget").innerHTML = trendWidgetCache.passengers;
+
+                const marker = markers[selectedBusId];
+                if (marker) {
+                    map.setView(marker.getLatLng(), 14);
+                    marker.openPopup();
+                }
+
+                refreshSelectedBusPanel();
+                setTimeout(fetchBusTrends, 150);
+            });
+
+            setTrafficLayerVisibility(true);
+            ensurePerformanceTabStructure();
+
+            setInterval(fetchBuses, 2000);
+            setInterval(fetchAnalytics, 5000);
+            setInterval(fetchBusTrends, 5000);
+            setInterval(fetchOverviewMetrics, 3000);
+            setInterval(fetchAstanaWeather, 1800000);
+
+            fetchAstanaWeather();
+            loadSupportRouteShape().then(() => fetchBuses());
+            fetchOverviewMetrics();
+            refreshSelectedBusPanel();
+            setTimeout(fetchBusTrends, 150);
+            setTimeout(refreshMapLayout, 300);
+            setupTabs();
+        </script>
+</body>
+
+</html>
