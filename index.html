@@ -12,49 +12,69 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
+        :root {
+            --bg-0: #edf4f6;
+            --bg-1: #f6fafb;
+            --panel: rgba(250, 253, 254, 0.96);
+            --panel-strong: rgba(255, 255, 255, 0.98);
+            --panel-soft: rgba(244, 249, 251, 0.96);
+            --line: rgba(80, 118, 137, 0.14);
+            --line-strong: rgba(29, 155, 170, 0.28);
+            --text: #15232d;
+            --muted: #6e8290;
+            --muted-2: #435867;
+            --accent: #1d9baa;
+            --accent-soft: rgba(29, 155, 170, 0.09);
+            --good: #20a85a;
+            --warning: #d98720;
+            --danger: #d85151;
+            --shadow: 0 16px 34px rgba(45, 73, 87, 0.14);
+        }
+
         html,
         body {
             margin: 0;
             padding: 0;
             height: 100%;
-            background: #181c21;
+            background: var(--bg-0);
             font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-            color: #f2f4f7;
+            color: var(--text);
         }
 
         #app-shell {
             height: 100vh;
             display: flex;
             flex-direction: column;
-            background: linear-gradient(180deg, #1e2329 0%, #181c21 100%);
+            background:
+                radial-gradient(circle at 22% -12%, rgba(58, 176, 190, 0.16), transparent 31%),
+                linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
         }
 
         #top-bar {
-            min-height: 72px;
+            min-height: 64px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 0 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            background: linear-gradient(180deg,
-                    rgba(36, 41, 48, 0.98) 0%,
-                    rgba(28, 32, 38, 0.98) 100%);
-            box-shadow: none;
+            border-bottom: 1px solid rgba(93, 132, 151, 0.16);
+            background: rgba(250, 253, 254, 0.92);
+            box-shadow: 0 10px 28px rgba(47, 76, 91, 0.10);
+            backdrop-filter: blur(10px);
         }
 
         #main-title {
-            font-size: 28px;
+            font-size: 21px;
             font-weight: 700;
-            color: #f5f7fa;
-            letter-spacing: 0.1px;
+            color: var(--text);
+            letter-spacing: 0;
             text-shadow: none;
         }
 
         #sub-title {
-            font-size: 13px;
-            color: #8fa6bf;
+            font-size: 12px;
+            color: var(--muted);
             margin-top: 4px;
-            letter-spacing: 0.15px;
+            letter-spacing: 0.2px;
         }
 
         #title-block {
@@ -64,28 +84,34 @@
         }
 
         .title-accent {
-            color: #8fb3d9;
+            color: var(--accent);
         }
 
         .status-chip {
             display: inline-block;
-            padding: 6px 14px;
-            border-radius: 999px;
-            background: rgba(66, 199, 122, 0.12);
-            border: 1px solid rgba(66, 199, 122, 0.22);
-            color: #eaf9f0;
+            padding: 7px 12px;
+            border-radius: 6px;
+            background: rgba(32, 168, 90, 0.10);
+            border: 1px solid rgba(32, 168, 90, 0.24);
+            color: #137343;
             font-weight: 700;
             font-size: 12px;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.5px;
             box-shadow: none;
+        }
+
+        #top-status {
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
 
         #main-layout {
             flex: 1;
             display: grid;
-            grid-template-columns: 230px 1fr 320px;
-            gap: 16px;
-            padding: 16px;
+            grid-template-columns: 260px minmax(560px, 1fr) 340px;
+            gap: 14px;
+            padding: 14px;
             min-height: 0;
         }
 
@@ -93,7 +119,8 @@
         #right-panel {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 12px;
+            min-height: 0;
         }
 
         #map-panel {
@@ -105,21 +132,20 @@
             width: 100%;
             height: 100%;
             min-height: 500px;
-            border-radius: 18px;
+            border-radius: 8px;
             overflow: hidden;
-            background: #111417;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+            background: #061018;
+            border: 1px solid rgba(80, 130, 150, 0.18);
+            box-shadow: var(--shadow);
         }
 
         .panel-card {
-
-            border-radius: 18px;
-            padding: 12px;
-            color: #edf2f7;
-            background: rgba(34, 39, 46, 0.96);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            border-radius: 10px;
+            padding: 14px;
+            color: var(--text);
+            background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+            border: 1px solid var(--line);
+            box-shadow: 0 12px 28px rgba(45, 73, 87, 0.10);
             position: relative;
         }
 
@@ -128,66 +154,70 @@
         }
 
         .panel-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: #d6dde6;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--muted-2);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
             text-shadow: none;
         }
 
         .panel-label {
             display: block;
-            font-size: 13px;
-            color: #8bb8d8;
+            font-size: 12px;
+            color: var(--muted);
             margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .panel-select {
             width: 100%;
-            margin-bottom: 14px;
-            padding: 10px 12px;
-            border-radius: 12px;
-            border: 1px solid rgba(70, 180, 255, 0.35);
-            background: rgba(4, 16, 34, 0.96);
-            color: #eaf4ff;
-            font-size: 15px;
+            margin-bottom: 12px;
+            padding: 10px 11px;
+            border-radius: 6px;
+            border: 1px solid var(--line-strong);
+            background: #ffffff;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 600;
             outline: none;
-            box-shadow:
-                0 0 10px rgba(0, 140, 255, 0.06),
-                inset 0 0 8px rgba(0, 100, 255, 0.05);
+            box-shadow: 0 1px 2px rgba(39, 65, 77, 0.05);
         }
 
         .panel-select:focus {
-            border-color: rgba(0, 220, 255, 0.55);
+            border-color: rgba(64, 211, 205, 0.72);
             box-shadow:
-                0 0 0 1px rgba(0, 220, 255, 0.12),
-                0 0 12px rgba(0, 180, 255, 0.12);
+                0 0 0 1px rgba(64, 211, 205, 0.16),
+                0 0 18px rgba(64, 211, 205, 0.12);
         }
 
         .top-toggle-btn {
-            padding: 8px 14px;
-            border-radius: 999px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(62, 69, 79, 0.92);
-            color: #eef2f6;
+            padding: 7px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(29, 155, 170, 0.22);
+            background: rgba(255, 255, 255, 0.76);
+            color: #176c78;
             font-weight: 600;
             font-size: 12px;
             cursor: pointer;
-            box-shadow: none;
+            box-shadow: 0 1px 2px rgba(39, 65, 77, 0.06);
         }
 
         .top-toggle-btn:hover {
-            background: rgba(74, 82, 93, 0.96);
-            border-color: rgba(255, 255, 255, 0.12);
+            background: #ffffff;
+            border-color: rgba(29, 155, 170, 0.34);
         }
 
         .metric-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            color: #eef2f7;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(124, 184, 207, 0.10);
+            color: var(--text);
+            gap: 10px;
         }
 
         .route-metric-row {
@@ -195,8 +225,8 @@
             grid-template-columns: 110px 1fr;
             gap: 12px;
             padding: 10px 0;
-            border-bottom: 1px solid rgba(120, 170, 220, 0.12);
-            color: #d8eeff;
+            border-bottom: 1px solid rgba(124, 184, 207, 0.12);
+            color: var(--text);
             align-items: start;
         }
 
@@ -205,7 +235,7 @@
         }
 
         .route-metric-label {
-            color: #b9dfff;
+            color: var(--muted);
             line-height: 1.4;
         }
 
@@ -253,9 +283,9 @@
         }
 
         .leaflet-popup-content-wrapper {
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.97);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+            border-radius: 8px;
+            background: rgba(247, 250, 252, 0.98);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
         }
 
         .leaflet-popup-tip {
@@ -263,24 +293,24 @@
         }
 
         .leaflet-control-zoom a {
-            background: rgba(9, 24, 44, 0.92) !important;
-            color: #eaf4ff !important;
-            border: 1px solid rgba(0, 220, 255, 0.20) !important;
-            box-shadow: 0 0 10px rgba(0, 180, 255, 0.10);
+            background: rgba(255, 255, 255, 0.94) !important;
+            color: #20313c !important;
+            border: 1px solid rgba(80, 118, 137, 0.16) !important;
+            box-shadow: 0 8px 18px rgba(23, 43, 55, 0.12);
         }
 
         .leaflet-control-zoom a:hover {
-            background: rgba(15, 35, 60, 0.96) !important;
+            background: #ffffff !important;
         }
 
         .route-toggle-btn {
             margin-top: 12px;
             width: 100%;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(255, 255, 255, 0.03);
-            color: #e6edf5;
+            padding: 9px 11px;
+            border-radius: 6px;
+            border: 1px solid var(--line);
+            background: #ffffff;
+            color: #31505d;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
@@ -288,8 +318,8 @@
         }
 
         .route-toggle-btn:hover {
-            background: rgba(255, 255, 255, 0.06);
-            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(29, 155, 170, 0.07);
+            border-color: rgba(29, 155, 170, 0.24);
         }
 
         .route-stops-panel {
@@ -301,43 +331,12 @@
             display: block;
         }
 
-        .tab-bar {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            background: rgba(50, 58, 69, 0.94);
-            color: #dde5ee;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .tab-btn.active {
-            background: rgba(78, 92, 112, 0.98);
-            border-color: rgba(255, 255, 255, 0.10);
-            color: #ffffff;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
         .traffic-bar {
             height: 8px;
             border-radius: 6px;
             margin-top: 4px;
             margin-bottom: 10px;
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(80, 118, 137, 0.10);
             overflow: hidden;
         }
 
@@ -350,47 +349,51 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 0;
         }
 
         .kpi-card {
-            background: rgba(255, 255, 255, 0.025);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 8px;
-            text-align: center;
+            background: rgba(29, 155, 170, 0.055);
+            border: 1px solid rgba(29, 155, 170, 0.13);
+            border-radius: 9px;
+            padding: 12px;
         }
 
         .kpi-value {
-            font-size: 18px;
+            font-size: 26px;
             font-weight: 700;
-            color: #ffffff;
+            color: #132934;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
         }
 
         .kpi-label {
             font-size: 11px;
-            color: #c5ced9;
-            margin-top: 2px;
+            color: var(--muted);
+            margin-top: 5px;
             line-height: 1.25;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
         }
 
         .widget-card {
-            background: rgba(40, 46, 54, 0.85);
-            color: #edf4fb;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: none;
-            border-radius: 16px;
-            padding: 14px;
-            margin-bottom: 12px;
-            line-height: 1.6;
+            background: var(--panel-soft);
+            color: var(--text);
+            border: 1px solid rgba(80, 118, 137, 0.12);
+            box-shadow: 0 6px 16px rgba(45, 73, 87, 0.06);
+            border-radius: 9px;
+            padding: 13px;
+            margin-bottom: 11px;
+            line-height: 1.5;
         }
 
         .widget-title {
-            font-size: 15px;
+            font-size: 12px;
             font-weight: 700;
-            margin-bottom: 10px;
-            color: #f4f7fa;
-            letter-spacing: 0.1px;
+            margin-bottom: 8px;
+            color: var(--muted-2);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
         }
 
         .widget-value-lg {
@@ -398,12 +401,13 @@
             font-weight: 700;
             line-height: 1.1;
             margin-bottom: 8px;
-            color: #ffffff;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
         }
 
         .widget-subtle {
             font-size: 12px;
-            color: #aeb8c4;
+            color: var(--muted);
         }
 
         .gauge-wrap {
@@ -425,87 +429,92 @@
 
         .metric-label {
             font-size: 13px;
-            color: #b8c2cf;
+            color: var(--muted);
         }
 
         .metric-value {
             font-size: 20px;
             font-weight: 700;
-            color: #ffffff;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
         }
 
         .map-widget {
             position: absolute;
-            right: 18px;
-            top: 18px;
+            right: 12px;
+            top: 12px;
             z-index: 1000;
-            width: 220px;
-            padding: 12px 14px;
-            border-radius: 14px;
-            background: rgba(34, 39, 46, 0.92);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            box-shadow: none;
-            color: #f2f6fb;
+            width: auto;
+            min-width: 145px;
+            max-width: 185px;
+            padding: 8px 9px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(80, 118, 137, 0.12);
+            box-shadow: 0 8px 18px rgba(23, 43, 55, 0.14);
+            color: var(--text);
             backdrop-filter: blur(4px);
+            pointer-events: none;
         }
 
         .status-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 12px;
+            gap: 8px;
         }
 
         .status-tile {
-            background: rgba(54, 62, 73, 0.92);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 14px;
-            padding: 12px;
-            min-height: 82px;
+            background: #ffffff;
+            border: 1px solid rgba(80, 118, 137, 0.10);
+            border-radius: 9px;
+            padding: 10px;
+            min-height: 70px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
         }
 
         .status-label {
-            font-size: 12px;
-            color: #aeb8c4;
+            font-size: 11px;
+            color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.4px;
         }
 
         .status-value {
-            font-size: 20px;
+            font-size: 17px;
             font-weight: 700;
             line-height: 1.1;
+            word-break: break-word;
         }
 
         .status-good {
-            color: #2ecc71;
+            color: var(--good);
         }
 
         .status-medium {
-            color: #ff9f0a;
+            color: var(--warning);
         }
 
         .status-bad {
-            color: #ff3b30;
+            color: var(--danger);
         }
 
         .status-info {
-            color: #00c2ff;
+            color: var(--accent);
         }
 
         .status-neutral {
-            color: #dfefff;
+            color: #dcebf2;
         }
 
         .support-bus-decision-marker {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            background: #00e676;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 18px rgba(0, 230, 118, 0.85);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--good);
+            border: 2px solid #f5fff8;
+            box-shadow: 0 0 16px rgba(73, 209, 125, 0.58);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -518,9 +527,9 @@
             width: 30px;
             height: 30px;
             border-radius: 50%;
-            background: #ff3b30;
+            background: var(--danger);
             border: 3px solid #ffffff;
-            box-shadow: 0 0 18px rgba(255, 59, 48, 0.9);
+            box-shadow: 0 0 18px rgba(239, 91, 91, 0.72);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -531,12 +540,12 @@
         }
 
         .dispatch-label {
-            background: rgba(255, 255, 255, 0.96);
-            color: #111;
-            border-radius: 14px;
-            padding: 9px 11px;
-            border: 1px solid rgba(0, 0, 0, 0.14);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+            background: rgba(248, 251, 252, 0.97);
+            color: #111820;
+            border-radius: 8px;
+            padding: 9px 10px;
+            border: 1px solid rgba(8, 20, 30, 0.16);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.30);
             font-family: Inter, Arial, sans-serif;
             font-size: 12px;
             line-height: 1.35;
@@ -544,7 +553,7 @@
         }
 
         .dispatch-label-title {
-            color: #ff3b30;
+            color: #c93f3f;
             font-weight: 900;
             margin-bottom: 4px;
         }
@@ -562,13 +571,70 @@
         }
 
         .dispatch-label-good {
-            color: #0a8f3c;
+            color: #0b8f48;
             font-weight: 900;
         }
 
         .dispatch-label-bad {
-            color: #c62828;
+            color: #bf3434;
             font-weight: 900;
+        }
+
+        .ops-list {
+            display: grid;
+            gap: 6px;
+        }
+
+        .ops-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(124, 184, 207, 0.10);
+        }
+
+        .ops-item:last-child {
+            border-bottom: none;
+        }
+
+        .ops-label {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .ops-value {
+            color: var(--text);
+            font-weight: 700;
+            text-align: right;
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .decision-state {
+            background:
+                linear-gradient(180deg, rgba(29, 155, 170, 0.10), rgba(255, 255, 255, 0.96));
+            border-color: rgba(29, 155, 170, 0.22);
+            border-left: 4px solid var(--accent);
+            box-shadow: 0 12px 26px rgba(45, 73, 87, 0.11);
+        }
+
+        .decision-state.warning {
+            background:
+                linear-gradient(180deg, rgba(217, 135, 32, 0.09), rgba(255, 255, 255, 0.96));
+            border-color: rgba(217, 135, 32, 0.20);
+            border-left-color: var(--warning);
+        }
+
+        .decision-state.critical {
+            background:
+                linear-gradient(180deg, rgba(216, 81, 81, 0.10), rgba(255, 255, 255, 0.96));
+            border-color: rgba(216, 81, 81, 0.22);
+            border-left-color: var(--danger);
+        }
+
+        #right-panel {
+            overflow-y: auto;
+            padding-right: 2px;
         }
 
         @keyframes dispatchPulse {
@@ -589,9 +655,9 @@
         }
 
         .bus-action-badge {
-            background: rgba(255, 255, 255, 0.96);
-            color: #111;
-            border-radius: 14px;
+            background: rgba(248, 251, 252, 0.96);
+            color: #111820;
+            border-radius: 8px;
             padding: 8px 10px;
             border: 1px solid rgba(0, 0, 0, 0.12);
             box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
@@ -604,7 +670,7 @@
         .bus-action-badge-title {
             font-weight: 800;
             margin-bottom: 4px;
-            color: #0066ff;
+            color: #087a9b;
         }
 
         .bus-action-badge-row {
@@ -614,23 +680,34 @@
         }
 
         .bus-action-badge-good {
-            color: #0a8f3c;
+            color: #0b8f48;
             font-weight: 800;
         }
 
         .bus-action-badge-bad {
-            color: #c62828;
+            color: #bf3434;
             font-weight: 800;
         }
 
         .bus-action-badge-waiting {
-            color: #ff8c00;
+            color: #c77712;
             font-weight: 800;
         }
 
         @media (max-width: 1400px) {
             #main-layout {
-                grid-template-columns: 220px 1fr 300px;
+                grid-template-columns: 240px minmax(500px, 1fr) 320px;
+            }
+        }
+
+        @media (max-width: 1100px) {
+            #main-layout {
+                grid-template-columns: 1fr;
+                overflow-y: auto;
+            }
+
+            #map {
+                min-height: 560px;
             }
         }
     </style>
@@ -643,8 +720,9 @@
                 <div id="main-title">
                     Smart City Transport <span class="title-accent">Digital Twin</span>
                 </div>
+                <div id="sub-title">Dispatch Control Center</div>
             </div>
-            <div id="top-status" style="display: flex; gap: 10px; align-items: center;">
+            <div id="top-status">
                 <button id="traffic-toggle" class="top-toggle-btn">Traffic Layer: ON</button>
                 <span class="status-chip">LIVE</span>
             </div>
@@ -653,7 +731,7 @@
         <div id="main-layout">
             <div id="left-panel">
                 <div class="panel-card">
-                    <div class="panel-title">System Overview</div>
+                    <div class="panel-title">Network Status</div>
                     <div id="overview-content">
 
                         <div class="kpi-grid">
@@ -663,55 +741,40 @@
                             </div>
 
                             <div class="kpi-card">
-                                <div class="kpi-value" id="metric-avg-speed">-</div>
-                                <div class="kpi-label">Avg speed</div>
+                                <div class="kpi-value" id="metric-routes">-</div>
+                                <div class="kpi-label">Active routes</div>
                             </div>
                         </div>
+                    </div>
+                </div>
 
-                        <div class="metric-row">
-                            <span>Routes</span>
-                            <b id="metric-routes">-</b>
+                <div class="panel-card">
+                    <div class="panel-title">Current Issues</div>
+                    <div class="ops-list">
+                        <div class="ops-item">
+                            <span class="ops-label">High traffic buses</span>
+                            <span class="ops-value" id="metric-traffic-buses">-</span>
                         </div>
+                        <div class="widget-subtle" id="metric-traffic-buses-detail">None</div>
 
-                        <div class="metric-row">
-                            <span>High traffic buses</span>
-                            <b id="metric-traffic-buses">-</b>
+                        <div class="ops-item">
+                            <span class="ops-label">Overcrowded buses</span>
+                            <span class="ops-value" id="metric-overcrowded-buses">-</span>
                         </div>
-                        <div class="widget-subtle" id="metric-traffic-buses-detail"
-                            style="margin-top:-2px; margin-bottom:6px; font-size:11px;">
-                            None
-                        </div>
+                        <div class="widget-subtle" id="metric-overcrowded-buses-detail">None</div>
 
-                        <div class="metric-row">
-                            <span>Overcrowded buses</span>
-                            <b id="metric-overcrowded-buses">-</b>
-                        </div>
-                        <div class="widget-subtle" id="metric-overcrowded-buses-detail"
-                            style="margin-top:-2px; margin-bottom:6px; font-size:11px;">
-                            None
-                        </div>
-
-                        <div class="metric-row">
-                            <span>Mode</span>
-                            <b id="metric-mode">Simulation</b>
+                        <div class="ops-item">
+                            <span class="ops-label">Congestion zones</span>
+                            <span class="ops-value" id="metric-congestion-zones">0</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="panel-card">
-                    <div class="panel-title">Detected Congestion Zones</div>
-                    <div id="congestion-zones-left">
-                        <div class="kpi-card" style="margin-top: 8px;">
-                            <div class="kpi-value" id="metric-congestion-zones">0</div>
-                            <div class="kpi-label">Active / detected zones</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel-card">
-                    <div class="panel-title">Route Progress</div>
-                    <div id="route-progress-widget">
-                        <div class="widget-subtle">Loading stop information...</div>
+                    <div class="panel-title">Active Decisions</div>
+                    <div class="kpi-card">
+                        <div class="kpi-value" id="metric-active-decisions">0</div>
+                        <div class="kpi-label" id="metric-active-decisions-detail">No active dispatch decisions</div>
                     </div>
                 </div>
             </div>
@@ -725,22 +788,26 @@
 
             <div id="right-panel">
                 <div id="analytics-panel" class="panel-card">
-                    <div class="panel-title">Bus Dashboard</div>
+                    <div class="panel-title">Operator Panel</div>
 
                     <label for="bus-select" class="panel-label">Select bus</label>
                     <select id="bus-select" class="panel-select">
                         <option value="Bus_1">Bus_1</option>
                     </select>
 
-                    <div class="tab-bar">
-                        <button class="tab-btn active" data-tab="overview-tab">Overview</button>
-                        <button class="tab-btn" data-tab="performance-tab">Performance</button>
-                        <button class="tab-btn" data-tab="events-tab">Events</button>
+                    <div id="overview-tab"></div>
+                    <div id="decision-center" class="widget-card decision-state">
+                        <div class="widget-title">Decision Center</div>
+                        <div class="widget-subtle">Waiting for selected bus telemetry...</div>
                     </div>
-
-                    <div id="overview-tab" class="tab-content active"></div>
-                    <div id="performance-tab" class="tab-content"></div>
-                    <div id="events-tab" class="tab-content"></div>
+                    <div id="performance-tab"></div>
+                    <div id="route-progress-widget">
+                        <div class="widget-card">
+                            <div class="widget-title">Route Context</div>
+                            <div class="widget-subtle">Loading stop information...</div>
+                        </div>
+                    </div>
+                    <div id="events-tab" style="display:none;"></div>
                 </div>
             </div>
         </div>
@@ -768,6 +835,7 @@
 
             let selectedBusId = "Bus_1";
             let isFetchingBuses = false;
+            let latestBusesSnapshot = [];
             let historyLoaded = {};
             let lastKnownPoints = {};
             let trafficLayerEnabled = true;
@@ -858,13 +926,13 @@
                     if (data.error) return;
 
                     const html = `
-                    <div style="font-size: 14px; color: #8fd3ff; margin-bottom: 4px;">Astana Weather</div>
-                    <div style="font-size: 28px; font-weight: 700;">${data.currentTemperature}°C</div>
-                    <div style="font-size: 14px; margin: 4px 0 8px 0;">${weatherCodeToText(data.currentWeatherCode)}</div>
-                    <div style="font-size: 13px; color: #b9dfff;">
-                        H: ${data.todayMax}°C &nbsp; L: ${data.todayMin}°C
+                    <div style="font-size: 11px; color: #6e8290; text-transform: uppercase; letter-spacing: 0.5px;">Astana</div>
+                    <div style="font-size: 20px; font-weight: 800;">${data.currentTemperature}C ${weatherCodeToText(data.currentWeatherCode)}</div>
+                    <div style="display:none;">${weatherCodeToText(data.currentWeatherCode)}</div>
+                    <div style="font-size: 12px; color: #6e8290;">
+                        H ${data.todayMax}C / L ${data.todayMin}C
                     </div>
-                    <div style="font-size: 13px; color: #b9dfff;">
+                    <div style="font-size: 12px; color: #6e8290;">
                         Wind: ${data.currentWindSpeed} km/h
                     </div>
                 `;
@@ -1242,11 +1310,11 @@
 
             function buildPopup(bus) {
                 return `
-                <div style="font-family: Arial, sans-serif; min-width: 170px;">
-                    <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
+                <div style="font-family: Inter, Arial, sans-serif; min-width: 158px; max-width: 220px;">
+                    <div style="font-size: 16px; font-weight: 800; margin-bottom: 6px; color:#0b1720;">
                         ${bus.busId}
                     </div>
-                    <div style="font-size: 14px; line-height: 1.5;">
+                    <div style="font-size: 12px; line-height: 1.45; color:#26323b;">
                         <b>Speed:</b> ${(bus.speed * 3.6).toFixed(1)} km/h<br>
                         <b>Passengers:</b> ${bus.passengerCount}/60<br>
                         <b>Role:</b> ${isSupportBus(bus) ? "SUPPORT" : "MAIN"}<br>
@@ -1433,11 +1501,11 @@
             function buildEfficiencyGauge(score, label) {
                 const safeScore = Math.max(0, Math.min(100, Number(score) || 0));
 
-                let color = "#2ecc71";
+                let color = "#49d17d";
                 if (safeScore < 50) {
-                    color = "#ff3b30";
+                    color = "#ef5b5b";
                 } else if (safeScore < 75) {
-                    color = "#ff9f0a";
+                    color = "#f4a938";
                 }
 
                 const centerX = 110;
@@ -1458,7 +1526,7 @@
                     <path
                         d="M 38 110 A 72 72 0 0 1 182 110"
                         fill="none"
-                        stroke="rgba(255,255,255,0.10)"
+                        stroke="rgba(255,255,255,0.11)"
                         stroke-width="12"
                         stroke-linecap="round"
                     />
@@ -1481,27 +1549,27 @@
                         stroke-linecap="round"
                     />
 
-                    <circle cx="110" cy="110" r="6" fill="#ffffff" />
+                    <circle cx="110" cy="110" r="6" fill="#edf7fb" />
 
                     <text
                         x="110"
                         y="82"
                         text-anchor="middle"
-                        fill="#ffffff"
+                        fill="#edf7fb"
                         font-size="26"
                         font-weight="700"
                     >
                         ${safeScore.toFixed(1)}
                     </text>
 
-                    <text x="30" y="125" fill="#8bb8d8" font-size="10">0</text>
-                    <text x="180" y="125" fill="#8bb8d8" font-size="10">100</text>
+                    <text x="30" y="125" fill="#8da5b5" font-size="10">0</text>
+                    <text x="180" y="125" fill="#8da5b5" font-size="10">100</text>
 
                     <text
                         x="110"
                         y="110"
                         text-anchor="middle"
-                        fill="#8bb8d8"
+                        fill="#8da5b5"
                         font-size="12"
                     >
                         Efficiency Score
@@ -1528,14 +1596,6 @@
                 if (!document.getElementById("performance-summary-widget")) {
                     performanceTab.innerHTML = `
                     <div id="performance-summary-widget" class="widget-card"></div>
-
-                    <div id="speed-trend-widget" class="widget-card" style="min-height: 220px;">
-                        ${trendWidgetCache.speed}
-                    </div>
-
-                    <div id="passenger-trend-widget" class="widget-card" style="min-height: 220px;">
-                        ${trendWidgetCache.passengers}
-                    </div>
                 `;
                 }
             }
@@ -1544,7 +1604,7 @@
                 ensurePerformanceTabStructure();
 
                 const summaryHtml = `
-                <div class="widget-title">Average Indicators</div>
+                <div class="widget-title">Efficiency Impact</div>
 
                 <div class="metric-split">
                     <div class="metric-label">Avg Speed</div>
@@ -1781,7 +1841,7 @@
 
                 const html = `
         <div class="bus-action-badge">
-            <div class="bus-action-badge-title">🚪 Door OPEN</div>
+            <div class="bus-action-badge-title">Door OPEN</div>
 
             <div style="font-weight:700; margin-bottom:4px;">
                 ${stopName}
@@ -2247,6 +2307,98 @@
                 return "NORMAL";
             }
 
+            function getDecisionLabel(decisionType, bus = null) {
+                if (decisionType === "DISPATCH_SUPPORT_BUS") return "Dispatch support bus";
+                if (decisionType === "REGULAR_BUS_MONITOR") return "Monitor until next regular bus";
+                if (decisionType === "FULL_BUS_MONITOR") return "Capacity watch";
+                if (decisionType === "QUEUE_MONITOR") return "Queue watch";
+                if (isSupportBus(bus)) return "Support operating";
+                return "No intervention";
+            }
+
+            function getDisplayedActiveRouteCount(fallbackRoutes = 0) {
+                const routeIds = new Set(
+                    (Array.isArray(latestBusesSnapshot) ? latestBusesSnapshot : [])
+                        .filter(bus => !isSupportBus(bus))
+                        .filter(bus => !String(bus.routeId || "").endsWith("_SUPPORT"))
+                        .map(bus => bus.routeId)
+                        .filter(Boolean)
+                );
+
+                return routeIds.size || Math.max(0, Number(fallbackRoutes) || 0);
+            }
+
+            function getDecisionClass(decisionType) {
+                if (decisionType === "DISPATCH_SUPPORT_BUS" || decisionType === "FULL_BUS_MONITOR") {
+                    return "critical";
+                }
+                if (decisionType === "REGULAR_BUS_MONITOR" || decisionType === "QUEUE_MONITOR") {
+                    return "warning";
+                }
+                return "";
+            }
+
+            function updateActiveDecisionsMetric(buses) {
+                const activeDecisions = (Array.isArray(buses) ? buses : [])
+                    .filter(bus => getSupportDecisionType(bus) !== "NORMAL");
+
+                const countEl = document.getElementById("metric-active-decisions");
+                const detailEl = document.getElementById("metric-active-decisions-detail");
+
+                if (countEl) {
+                    countEl.textContent = activeDecisions.length;
+                }
+
+                if (detailEl) {
+                    detailEl.textContent = activeDecisions.length
+                        ? activeDecisions.map(bus => bus.busId).join(", ")
+                        : "No active dispatch decisions";
+                }
+            }
+
+            function updateDecisionCenter(bus) {
+                const center = document.getElementById("decision-center");
+                if (!center || !bus) return;
+
+                const decisionType = getSupportDecisionType(bus);
+                const decisionClass = getDecisionClass(decisionType);
+                const decisionValueClass = decisionClass === "critical"
+                    ? "status-bad"
+                    : decisionClass === "warning"
+                        ? "status-medium"
+                        : "status-good";
+                const queue = Number(bus.waitingPassengers || 0);
+                const passengers = Number(bus.passengerCount || 0);
+                const targetLatLng = [Number(bus.latitude), Number(bus.longitude)];
+                const supportPathInfo = getSupportPathInfo(targetLatLng);
+                const impact = calculateSupportImpactByDistance(supportPathInfo.distanceKm, queue);
+
+                center.className = `widget-card decision-state ${decisionClass}`.trim();
+
+                // Decision Center is updated from live selected-bus telemetry.
+                center.innerHTML = `
+                    <div class="widget-title">Decision Center</div>
+                    <div class="ops-list">
+                        <div class="ops-item">
+                            <span class="ops-label">Decision</span>
+                            <span class="ops-value ${decisionValueClass}">${getDecisionLabel(decisionType, bus)}</span>
+                        </div>
+                        <div class="ops-item">
+                            <span class="ops-label">Trigger</span>
+                            <span class="ops-value">${passengers}/${SUPPORT_DECISION.busCapacity} seats, ${queue} waiting</span>
+                        </div>
+                        <div class="ops-item">
+                            <span class="ops-label">Support ETA</span>
+                            <span class="ops-value">${decisionType === "DISPATCH_SUPPORT_BUS" ? `${impact.etaMinutes} min` : "Standby"}</span>
+                        </div>
+                        <div class="ops-item">
+                            <span class="ops-label">Queue after support</span>
+                            <span class="ops-value">${decisionType === "DISPATCH_SUPPORT_BUS" ? impact.queueAfterSupport : "-"}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
             function drawDecisionVisual(bus) {
                 const busId = bus.busId;
                 const decisionType = getSupportDecisionType(bus);
@@ -2447,6 +2599,12 @@
                 try {
                     const response = await fetch(`${API_BASE}/api/buses/latest`);
                     const data = await response.json();
+                    latestBusesSnapshot = Array.isArray(data) ? data : [];
+                    updateActiveDecisionsMetric(latestBusesSnapshot);
+                    const routeMetricEl = document.getElementById("metric-routes");
+                    if (routeMetricEl) {
+                        routeMetricEl.textContent = getDisplayedActiveRouteCount(routeMetricEl.textContent);
+                    }
 
                     for (const bus of data) {
                         ensureBusOption(bus.busId);
@@ -2474,15 +2632,16 @@
                                 trendWidgetCache.speed = `<div style="color:#8bb8d8; font-size:13px;">Loading speed trend...</div>`;
                                 trendWidgetCache.passengers = `<div style="color:#8bb8d8; font-size:13px;">Loading passenger trend...</div>`;
 
-                                ensurePerformanceTabStructure();
-                                document.getElementById("speed-trend-widget").innerHTML = trendWidgetCache.speed;
-                                document.getElementById("passenger-trend-widget").innerHTML = trendWidgetCache.passengers;
+                                document.getElementById("performance-tab").innerHTML = `
+                                    <div class="widget-card">
+                                        <div class="widget-title">Efficiency Impact</div>
+                                        <div class="widget-subtle">Loading selected bus analytics...</div>
+                                    </div>
+                                `;
 
                                 refreshSelectedBusPanel();
                                 map.setView(marker.getLatLng(), 14);
                                 marker.openPopup();
-
-                                setTimeout(fetchBusTrends, 150);
                             });
 
                             markers[bus.busId] = marker;
@@ -2492,6 +2651,9 @@
 
                         if (bus.busId === selectedBusId) {
                             const decisionType = getSupportDecisionType(bus);
+
+                            // Decision Center is refreshed whenever the selected bus receives new telemetry.
+                            updateDecisionCenter(bus);
 
                             if (decisionType === "DISPATCH_SUPPORT_BUS") {
                                 clearBusActionBadge(bus.busId);
@@ -2533,7 +2695,7 @@
                             document.getElementById("events-tab").innerHTML = analyticsCache.events;
                         }
                         if (analyticsCache.performanceSummary) {
-                            updatePerformanceSummaryFromCache();
+                            document.getElementById("performance-tab").innerHTML = analyticsCache.performanceSummary;
                         }
                         return;
                     }
@@ -2560,7 +2722,7 @@
 
                     const overviewHtml = `
             <div class="widget-card">
-                <div class="widget-title">Current State</div>
+                <div class="widget-title">Selected Bus State</div>
 
                 <div class="status-grid">
                     <div class="status-tile">
@@ -2591,10 +2753,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div class="widget-card">
-                ${buildEfficiencyGauge(data.routeEfficiencyScore, data.routeEfficiencyLabel)}
             </div>
         `;
 
@@ -2648,13 +2806,33 @@
             </div>
         `;
 
+                    const performanceHtml = `
+            <div class="widget-card">
+                ${buildEfficiencyGauge(data.routeEfficiencyScore, data.routeEfficiencyLabel)}
+                <div class="ops-list">
+                    <div class="ops-item">
+                        <span class="ops-label">Average speed</span>
+                        <span class="ops-value">${(data.avgSpeed * 3.6).toFixed(1)} km/h</span>
+                    </div>
+                    <div class="ops-item">
+                        <span class="ops-label">Average load</span>
+                        <span class="ops-value">${data.avgPassengers} passengers</span>
+                    </div>
+                    <div class="ops-item">
+                        <span class="ops-label">Operational note</span>
+                        <span class="ops-value">${operationalInsight}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
                     document.getElementById("overview-tab").innerHTML = overviewHtml;
                     document.getElementById("events-tab").innerHTML = eventsHtml;
+                    document.getElementById("performance-tab").innerHTML = performanceHtml;
 
                     analyticsCache.overview = overviewHtml;
                     analyticsCache.events = eventsHtml;
-
-                    updatePerformanceSummary(data.avgSpeed, data.avgPassengers);
+                    analyticsCache.performanceSummary = performanceHtml;
                 } catch (err) {
                     console.error("Analytics error:", err);
 
@@ -2667,7 +2845,7 @@
                     }
 
                     if (analyticsCache.performanceSummary) {
-                        updatePerformanceSummaryFromCache();
+                        document.getElementById("performance-tab").innerHTML = analyticsCache.performanceSummary;
                     }
                 }
             }
@@ -2685,11 +2863,9 @@
                     if (data.error) return;
 
                     document.getElementById("metric-active-buses").textContent = data.activeBuses;
-                    document.getElementById("metric-routes").textContent = data.routes;
-                    document.getElementById("metric-avg-speed").textContent = `${(data.avgNetworkSpeed * 3.6).toFixed(1)} km/h`;
+                    document.getElementById("metric-routes").textContent = getDisplayedActiveRouteCount(data.routes);
                     document.getElementById("metric-traffic-buses").textContent = data.highTrafficBusesCount;
                     document.getElementById("metric-overcrowded-buses").textContent = data.overcrowdedBusesCount;
-                    document.getElementById("metric-mode").textContent = data.mode;
 
                     const highTrafficList = data.highTrafficBusIds.length
                         ? data.highTrafficBusIds.join(", ")
@@ -2723,9 +2899,9 @@
                     return;
                 }
 
-                const previousStop = stopsData.previousStopName || "—";
-                const currentStop = stopsData.currentStopName || "—";
-                const nextStop = stopsData.nextStopName || "—";
+                const previousStop = stopsData.previousStopName || "-";
+                const currentStop = stopsData.currentStopName || "-";
+                const nextStop = stopsData.nextStopName || "-";
 
                 const stopListHtml = stopsData.stops.map((stop, index) => {
                     let rowColor = "#dfefff";
@@ -2735,11 +2911,11 @@
                     if (index === stopsData.currentStopIndex) {
                         rowColor = "#00c2ff";
                         markerColor = "#00c2ff";
-                        badge = ` <span style="color:#00c2ff;">• current</span>`;
+                        badge = ` <span style="color:#00c2ff;">current</span>`;
                     } else if (stopsData.currentStopIndex !== null && index === stopsData.currentStopIndex + 1) {
                         rowColor = "#77e66a";
                         markerColor = "#77e66a";
-                        badge = ` <span style="color:#77e66a;">• next</span>`;
+                        badge = ` <span style="color:#77e66a;">next</span>`;
                     }
 
                     return `
@@ -2770,7 +2946,7 @@
 
                 container.innerHTML = `
         <div class="widget-card" style="margin-bottom:0;">
-            <div class="widget-title">Selected Bus Route Context</div>
+            <div class="widget-title">Route Context</div>
 
             <div class="route-metric-row">
                 <div class="route-metric-label">Previous stop</div>
@@ -2841,9 +3017,12 @@
                 trendWidgetCache.speed = `<div style="color:#8bb8d8; font-size:13px;">Loading speed trend...</div>`;
                 trendWidgetCache.passengers = `<div style="color:#8bb8d8; font-size:13px;">Loading passenger trend...</div>`;
 
-                ensurePerformanceTabStructure();
-                document.getElementById("speed-trend-widget").innerHTML = trendWidgetCache.speed;
-                document.getElementById("passenger-trend-widget").innerHTML = trendWidgetCache.passengers;
+                document.getElementById("performance-tab").innerHTML = `
+                    <div class="widget-card">
+                        <div class="widget-title">Efficiency Impact</div>
+                        <div class="widget-subtle">Loading selected bus analytics...</div>
+                    </div>
+                `;
 
                 const marker = markers[selectedBusId];
                 if (marker) {
@@ -2852,15 +3031,18 @@
                 }
 
                 refreshSelectedBusPanel();
-                setTimeout(fetchBusTrends, 150);
             });
 
             setTrafficLayerVisibility(true);
-            ensurePerformanceTabStructure();
+            document.getElementById("performance-tab").innerHTML = `
+                <div class="widget-card">
+                    <div class="widget-title">Efficiency Impact</div>
+                    <div class="widget-subtle">Loading selected bus analytics...</div>
+                </div>
+            `;
 
             setInterval(fetchBuses, 2000);
             setInterval(fetchAnalytics, 5000);
-            setInterval(fetchBusTrends, 5000);
             setInterval(fetchOverviewMetrics, 3000);
             setInterval(fetchAstanaWeather, 1800000);
 
@@ -2868,7 +3050,6 @@
             loadSupportRouteShape().then(() => fetchBuses());
             fetchOverviewMetrics();
             refreshSelectedBusPanel();
-            setTimeout(fetchBusTrends, 150);
             setTimeout(refreshMapLayout, 300);
             setupTabs();
         </script>
