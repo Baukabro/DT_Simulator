@@ -2,3128 +2,1479 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Digital Twin Map</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart City Transport Digital Twin</title>
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <style>
+        :root {
+            --bg: #f4f7f8;
+            --surface: #ffffff;
+            --surface-soft: #f8fbfc;
+            --border: #dde8ec;
+            --text: #152432;
+            --muted: #6f8190;
+            --blue: #2367e8;
+            --teal: #0f9faf;
+            --green: #1a9c62;
+            --amber: #d98412;
+            --red: #d94141;
+            --shadow: 0 10px 28px rgba(38, 67, 88, 0.09);
+            --shadow-soft: 0 4px 14px rgba(38, 67, 88, 0.07);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         html,
         body {
             margin: 0;
-            padding: 0;
-            height: 100%;
-            background: #e9f1f5;
-            font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
-            color: #16202c;
+            min-height: 100%;
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            letter-spacing: 0;
         }
 
-        #app-shell {
+        body {
+            overflow: hidden;
+        }
+
+        button,
+        select {
+            font: inherit;
+        }
+
+        .app {
             height: 100vh;
-            display: flex;
-            flex-direction: column;
-            background:
-                linear-gradient(180deg, rgba(246, 250, 252, 0.96) 0%, rgba(230, 240, 246, 0.96) 100%);
+            display: grid;
+            grid-template-rows: 64px 88px 1fr 112px;
+            gap: 14px;
+            padding: 14px;
         }
 
-        #top-bar {
-            min-height: 72px;
+        .topbar,
+        .panel,
+        .kpi-card,
+        .analytics {
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-soft);
+        }
+
+        .topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 24px;
-            border-bottom: 1px solid rgba(51, 90, 115, 0.12);
-            background: rgba(255, 255, 255, 0.86);
-            box-shadow: 0 8px 28px rgba(39, 76, 104, 0.08);
-            backdrop-filter: blur(14px);
+            gap: 18px;
+            border-radius: 16px;
+            padding: 0 18px;
         }
 
-        #main-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #172433;
-            letter-spacing: 0;
-            text-shadow: none;
-        }
-
-        #sub-title {
-            font-size: 13px;
-            color: #8fa6bf;
-            margin-top: 4px;
-            letter-spacing: 0.15px;
-        }
-
-        #title-block {
+        .brand {
             display: flex;
-            flex-direction: column;
-            gap: 2px;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
         }
 
-        .title-accent {
-            color: #238aa6;
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--blue), var(--teal));
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-weight: 800;
+            font-size: 14px;
+            flex: 0 0 auto;
         }
 
-        .status-chip {
-            display: inline-block;
-            padding: 7px 13px;
+        .brand-title {
+            font-weight: 800;
+            font-size: 17px;
+            line-height: 1.15;
+            white-space: nowrap;
+        }
+
+        .brand-subtitle {
+            color: var(--muted);
+            font-size: 12px;
+            margin-top: 3px;
+            white-space: nowrap;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .live-badge,
+        .time-pill,
+        .toggle-btn {
             border-radius: 999px;
-            background: rgba(33, 169, 118, 0.12);
-            border: 1px solid rgba(33, 169, 118, 0.22);
-            color: #14784f;
+            border: 1px solid var(--border);
+            background: var(--surface-soft);
+            color: var(--text);
             font-weight: 700;
             font-size: 12px;
-            letter-spacing: 0;
-            box-shadow: 0 6px 18px rgba(33, 169, 118, 0.10);
+            padding: 8px 12px;
+            line-height: 1;
         }
 
-        #main-layout {
-            flex: 1;
+        .live-badge {
+            color: var(--green);
+            background: #ebf8f1;
+            border-color: #caecd9;
+        }
+
+        .live-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            margin-right: 7px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+
+        .toggle-btn {
+            cursor: pointer;
+            color: #155c68;
+            background: #ecfbfd;
+            border-color: #bfe9ef;
+        }
+
+        .toggle-btn.off {
+            color: var(--muted);
+            background: #f3f5f6;
+            border-color: var(--border);
+        }
+
+        .kpi-strip {
             display: grid;
-            grid-template-columns: 240px 1fr 330px;
-            gap: 16px;
-            padding: 16px;
-            min-height: 0;
+            grid-template-columns: repeat(5, minmax(120px, 1fr));
+            gap: 12px;
         }
 
-        #left-panel,
-        #right-panel {
+        .kpi-card {
+            border-radius: 14px;
+            padding: 14px 16px;
             display: flex;
-            flex-direction: column;
-            gap: 16px;
+            justify-content: space-between;
+            align-items: center;
+            min-width: 0;
         }
 
-        #map-panel {
+        .kpi-value {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .kpi-label {
+            margin-top: 4px;
+            color: var(--muted);
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .kpi-accent {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: #eef5ff;
+            color: var(--blue);
+            display: grid;
+            place-items: center;
+            font-weight: 800;
+            flex: 0 0 auto;
+        }
+
+        .main-grid {
+            min-height: 0;
+            display: grid;
+            grid-template-columns: 292px minmax(420px, 1fr) 340px;
+            gap: 14px;
+        }
+
+        .panel {
+            min-height: 0;
+            border-radius: 16px;
+            padding: 14px;
+            overflow: auto;
+        }
+
+        .panel-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #425463;
+            text-transform: uppercase;
+            margin: 0 0 12px;
+        }
+
+        .route-card {
+            border: 1px solid var(--border);
+            background: var(--surface-soft);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+
+        .route-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .route-name {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            font-weight: 800;
+        }
+
+        .route-color {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .route-status {
+            font-size: 11px;
+            font-weight: 800;
+            border-radius: 999px;
+            padding: 5px 8px;
+            background: #ecf8f0;
+            color: var(--green);
+        }
+
+        .route-status.warn {
+            background: #fff5e6;
+            color: var(--amber);
+        }
+
+        .route-status.danger {
+            background: #ffeded;
+            color: var(--red);
+        }
+
+        .route-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin: 11px 0;
+        }
+
+        .mini-stat {
+            border: 1px solid #e6eef2;
+            background: #fff;
+            border-radius: 10px;
+            padding: 8px;
+        }
+
+        .mini-stat span {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .mini-stat b {
+            display: block;
+            margin-top: 4px;
+            font-size: 15px;
+        }
+
+        .route-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .small-btn {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fff;
+            color: #496071;
+            padding: 8px 9px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .small-btn.active {
+            color: #0d6c78;
+            background: #e9fafd;
+            border-color: #bde9ef;
+        }
+
+        .map-wrap {
             position: relative;
             min-height: 0;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: #dfeaec;
+            box-shadow: var(--shadow);
         }
 
         #map {
             width: 100%;
             height: 100%;
-            min-height: 500px;
-            border-radius: 16px;
-            overflow: hidden;
-            background: #111417;
-            border: 1px solid rgba(50, 90, 115, 0.16);
-            box-shadow: 0 20px 44px rgba(42, 72, 95, 0.18);
+            min-height: 100%;
         }
 
-        .panel-card {
-
-            border-radius: 14px;
-            padding: 14px;
-            color: #1c2a38;
-            background: rgba(255, 255, 255, 0.88);
-            border: 1px solid rgba(53, 96, 122, 0.12);
-            box-shadow: 0 12px 30px rgba(45, 79, 103, 0.10);
-            position: relative;
-        }
-
-        .panel-card::before {
-            content: none;
-        }
-
-        .panel-title {
-            font-size: 13px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            color: #425568;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-            text-shadow: none;
-        }
-
-        .panel-label {
-            display: block;
-            font-size: 12px;
-            color: #65778a;
-            margin-bottom: 6px;
-            font-weight: 600;
-        }
-
-        .panel-select {
-            width: 100%;
-            margin-bottom: 14px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(35, 138, 166, 0.24);
-            background: rgba(248, 252, 254, 0.98);
-            color: #182635;
-            font-size: 14px;
-            font-weight: 600;
-            outline: none;
-            box-shadow: 0 6px 14px rgba(44, 94, 120, 0.07);
-        }
-
-        .panel-select:focus {
-            border-color: rgba(35, 138, 166, 0.56);
-            box-shadow: 0 0 0 3px rgba(35, 138, 166, 0.12);
-        }
-
-        .top-toggle-btn {
-            padding: 8px 14px;
-            border-radius: 999px;
-            border: 1px solid rgba(35, 138, 166, 0.18);
-            background: rgba(235, 249, 252, 0.92);
-            color: #1c7891;
-            font-weight: 700;
-            font-size: 12px;
-            cursor: pointer;
-            box-shadow: 0 6px 16px rgba(35, 138, 166, 0.10);
-        }
-
-        .top-toggle-btn:hover {
-            background: rgba(219, 244, 249, 0.96);
-            border-color: rgba(35, 138, 166, 0.30);
-        }
-
-        .metric-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid rgba(52, 94, 119, 0.10);
-            color: #253445;
-            font-size: 13px;
-        }
-
-        .metric-row b {
-            color: #142234;
-            font-size: 15px;
-        }
-
-        .route-metric-row {
-            display: grid;
-            grid-template-columns: 110px 1fr;
-            gap: 12px;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(52, 94, 119, 0.10);
-            color: #243344;
-            align-items: start;
-        }
-
-        .route-metric-row:last-child {
-            border-bottom: none;
-        }
-
-        .route-metric-label {
-            color: #718296;
-            line-height: 1.4;
-        }
-
-        .route-metric-value {
-            text-align: left;
-            font-weight: 700;
-            line-height: 1.45;
-            word-break: break-word;
-            white-space: normal;
-        }
-
-        .metric-row:last-child {
-            border-bottom: none;
-        }
-
-        .stop-square-marker {
-            width: 12px;
-            height: 12px;
-            border-radius: 2px;
-            background: #d9f7c8;
-            border: 2px solid #f4fff0;
-            box-shadow:
-                0 0 0 1px rgba(0, 0, 0, 0.35),
-                0 0 8px rgba(180, 255, 180, 0.35);
-        }
-
-        .stop-square-marker.current {
-            width: 14px;
-            height: 14px;
-            background: #00c2ff;
-            border: 2px solid #dff8ff;
-            box-shadow:
-                0 0 0 1px rgba(0, 0, 0, 0.35),
-                0 0 10px rgba(0, 194, 255, 0.45);
-        }
-
-        .stop-square-marker.next {
-            width: 13px;
-            height: 13px;
-            background: #77e66a;
-            border: 2px solid #f3fff2;
-            box-shadow:
-                0 0 0 1px rgba(0, 0, 0, 0.35),
-                0 0 10px rgba(119, 230, 106, 0.40);
-        }
-
-        .leaflet-popup-content-wrapper {
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.97);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-        }
-
-        .leaflet-popup-tip {
-            background: rgba(255, 255, 255, 0.97);
-        }
-
-        .leaflet-control-zoom a {
-            background: rgba(255, 255, 255, 0.96) !important;
-            color: #203040 !important;
-            border: 1px solid rgba(46, 85, 110, 0.14) !important;
-            box-shadow: 0 8px 16px rgba(31, 61, 80, 0.16);
-        }
-
-        .leaflet-control-zoom a:hover {
-            background: rgba(235, 249, 252, 0.98) !important;
-        }
-
-        .route-toggle-btn {
-            margin-top: 12px;
-            width: 100%;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(35, 138, 166, 0.16);
-            background: rgba(236, 249, 252, 0.72);
-            color: #1f6f83;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.18s ease;
-        }
-
-        .route-toggle-btn:hover {
-            background: rgba(218, 244, 250, 0.86);
-            border-color: rgba(35, 138, 166, 0.26);
-        }
-
-        .route-stops-panel {
-            display: none;
-            margin-top: 12px;
-        }
-
-        .route-stops-panel.open {
-            display: block;
-        }
-
-        .tab-bar {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            background: rgba(50, 58, 69, 0.94);
-            color: #dde5ee;
-            font-weight: 600;
-            cursor: pointer;
-        }
-
-        .tab-btn.active {
-            background: rgba(78, 92, 112, 0.98);
-            border-color: rgba(255, 255, 255, 0.10);
-            color: #ffffff;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .traffic-bar {
-            height: 8px;
-            border-radius: 6px;
-            margin-top: 4px;
-            margin-bottom: 10px;
-            background: rgba(54, 93, 116, 0.10);
-            overflow: hidden;
-        }
-
-        .traffic-fill {
-            height: 100%;
-            border-radius: 6px;
-        }
-
-        .kpi-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .kpi-card {
-            background: rgba(240, 249, 252, 0.72);
-            border: 1px solid rgba(35, 138, 166, 0.12);
-            border-radius: 11px;
-            padding: 10px 8px;
-            text-align: center;
-        }
-
-        .kpi-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: #162638;
-        }
-
-        .kpi-label {
-            font-size: 11px;
-            color: #66798a;
-            margin-top: 2px;
-            line-height: 1.25;
-        }
-
-        .widget-card {
-            background: rgba(248, 252, 254, 0.92);
-            color: #243344;
-            border: 1px solid rgba(52, 94, 119, 0.10);
-            box-shadow: 0 8px 20px rgba(42, 78, 103, 0.08);
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 10px;
-            line-height: 1.55;
-        }
-
-        .widget-title {
-            font-size: 13px;
-            font-weight: 700;
-            margin-bottom: 10px;
-            color: #43576a;
-            letter-spacing: 0;
-        }
-
-        .widget-value-lg {
-            font-size: 22px;
-            font-weight: 700;
-            line-height: 1.1;
-            margin-bottom: 8px;
-            color: #152536;
-        }
-
-        .widget-subtle {
-            font-size: 12px;
-            color: #6b7d90;
-        }
-
-        .gauge-wrap {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .metric-split {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 8px;
-        }
-
-        .metric-split:last-child {
-            margin-bottom: 0;
-        }
-
-        .metric-label {
-            font-size: 13px;
-            color: #6c7d8f;
-        }
-
-        .metric-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: #152536;
-        }
-
-        .map-widget {
+        .map-chip {
             position: absolute;
-            right: 18px;
-            top: 18px;
-            z-index: 1000;
-            width: 172px;
-            padding: 10px 12px;
-            border-radius: 13px;
-            background: rgba(255, 255, 255, 0.90);
-            border: 1px solid rgba(45, 84, 108, 0.14);
-            box-shadow: 0 12px 26px rgba(18, 38, 54, 0.16);
-            color: #182839;
-            backdrop-filter: blur(10px);
-        }
-
-        .status-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .status-tile {
-            background: rgba(240, 248, 251, 0.78);
-            border: 1px solid rgba(35, 138, 166, 0.10);
-            border-radius: 12px;
-            padding: 11px;
-            min-height: 78px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-        }
-
-        .status-label {
-            font-size: 12px;
-            color: #6e7f91;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
-        }
-
-        .status-value {
-            font-size: 20px;
-            font-weight: 700;
-            line-height: 1.1;
-        }
-
-        .status-good {
-            color: #2ecc71;
-        }
-
-        .status-medium {
-            color: #ff9f0a;
-        }
-
-        .status-bad {
-            color: #ff3b30;
-        }
-
-        .status-info {
-            color: #00c2ff;
-        }
-
-        .status-neutral {
-            color: #52677a;
-        }
-
-        .operator-section-title {
-            margin: 14px 0 8px 0;
-            color: #425568;
+            z-index: 450;
+            left: 14px;
+            top: 14px;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            box-shadow: var(--shadow-soft);
+            padding: 8px 12px;
+            color: #526271;
             font-size: 12px;
             font-weight: 800;
-            letter-spacing: 0.35px;
+        }
+
+        .weather {
+            position: absolute;
+            right: 14px;
+            top: 14px;
+            z-index: 450;
+            max-width: 210px;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-soft);
+            padding: 9px 11px;
+            color: #526271;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .operator-select {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: #fff;
+            padding: 10px 12px;
+            color: var(--text);
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .info-tile,
+        .decision-box,
+        .analytics {
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface-soft);
+            padding: 10px;
+        }
+
+        .info-tile span {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 800;
             text-transform: uppercase;
         }
 
-        .decision-center-card {
-            background: linear-gradient(180deg, rgba(235, 250, 253, 0.95), rgba(248, 252, 254, 0.95));
-            border: 1px solid rgba(35, 138, 166, 0.16);
-            border-left: 4px solid rgba(35, 138, 166, 0.62);
-            box-shadow: 0 10px 24px rgba(35, 91, 119, 0.10);
+        .info-tile b {
+            display: block;
+            margin-top: 4px;
+            font-size: 14px;
+            word-break: break-word;
         }
 
-        .decision-center-card.warning {
-            background: rgba(255, 249, 240, 0.96);
-            border-color: rgba(224, 139, 38, 0.20);
-            border-left-color: #e08b26;
+        .decision-box {
+            margin-top: 12px;
         }
 
-        .decision-center-card.risk {
-            background: rgba(255, 245, 244, 0.96);
-            border-color: rgba(214, 73, 62, 0.20);
-            border-left-color: #d6493e;
-        }
-
-        .decision-center-title {
+        .decision-title {
             display: flex;
-            justify-content: space-between;
-            gap: 10px;
             align-items: center;
+            justify-content: space-between;
+            gap: 8px;
             margin-bottom: 8px;
+            font-weight: 800;
         }
 
         .decision-pill {
-            padding: 4px 8px;
             border-radius: 999px;
-            background: rgba(35, 138, 166, 0.10);
-            color: #1f7389;
-            font-size: 11px;
+            padding: 5px 8px;
+            background: #edf6ff;
+            color: var(--blue);
+            font-size: 10px;
             font-weight: 800;
-            white-space: nowrap;
         }
 
-        .decision-pill.warning {
-            background: rgba(224, 139, 38, 0.12);
-            color: #9a5a12;
+        .decision-pill.warn {
+            background: #fff4e1;
+            color: var(--amber);
         }
 
-        .decision-pill.risk {
-            background: rgba(214, 73, 62, 0.12);
-            color: #a43128;
+        .decision-pill.support {
+            background: #e8f8ef;
+            color: var(--green);
         }
 
-        .support-bus-decision-marker {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            background: #00e676;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 18px rgba(0, 230, 118, 0.85);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #062915;
-            font-size: 19px;
-            font-weight: 900;
-        }
-
-        .dispatch-target-marker {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            background: #ff3b30;
-            border: 3px solid #ffffff;
-            box-shadow: 0 0 18px rgba(255, 59, 48, 0.9);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 16px;
-            font-weight: 900;
-            animation: dispatchPulse 1.2s infinite;
-        }
-
-        .dispatch-label {
-            background: rgba(255, 255, 255, 0.96);
-            color: #111;
-            border-radius: 14px;
-            padding: 9px 11px;
-            border: 1px solid rgba(0, 0, 0, 0.14);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
-            font-family: Inter, Arial, sans-serif;
-            font-size: 12px;
-            line-height: 1.35;
-            min-width: 220px;
-        }
-
-        .dispatch-label-title {
-            color: #ff3b30;
-            font-weight: 900;
-            margin-bottom: 4px;
-        }
-
-        .dispatch-label-row {
+        .decision-line {
             display: flex;
             justify-content: space-between;
             gap: 12px;
-        }
-
-        .dispatch-label-row span:last-child {
-            text-align: right;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
-        .dispatch-label-good {
-            color: #0a8f3c;
-            font-weight: 900;
-        }
-
-        .dispatch-label-bad {
-            color: #c62828;
-            font-weight: 900;
-        }
-
-        @keyframes dispatchPulse {
-            0% {
-                transform: scale(1);
-                box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7);
-            }
-
-            70% {
-                transform: scale(1.08);
-                box-shadow: 0 0 0 16px rgba(255, 59, 48, 0);
-            }
-
-            100% {
-                transform: scale(1);
-                box-shadow: 0 0 0 0 rgba(255, 59, 48, 0);
-            }
-        }
-
-        .bus-action-badge {
-            background: rgba(255, 255, 255, 0.96);
-            color: #111;
-            border-radius: 14px;
-            padding: 8px 10px;
-            border: 1px solid rgba(0, 0, 0, 0.12);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
-            font-family: Inter, Arial, sans-serif;
+            border-top: 1px solid #e2eaee;
+            padding-top: 8px;
+            margin-top: 8px;
+            color: #465867;
             font-size: 12px;
-            line-height: 1.35;
-            min-width: 120px;
         }
 
-        .bus-action-badge-title {
-            font-weight: 800;
-            margin-bottom: 4px;
-            color: #0066ff;
+        .decision-line b {
+            color: var(--text);
+            text-align: right;
         }
 
-        .bus-action-badge-row {
+        .analytics {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1fr;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .analytics h3 {
+            margin: 0 0 8px;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #425463;
+        }
+
+        .issue-list,
+        .compact-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+            color: #4b5e6e;
+        }
+
+        .issue-item,
+        .compact-row {
             display: flex;
             justify-content: space-between;
-            gap: 10px;
+            gap: 12px;
+            border-radius: 9px;
+            background: #fff;
+            border: 1px solid #e4edf1;
+            padding: 8px 9px;
         }
 
-        .bus-action-badge-good {
-            color: #0a8f3c;
+        .bar-row {
+            display: grid;
+            grid-template-columns: 74px 1fr 40px;
+            gap: 8px;
+            align-items: center;
+            font-size: 12px;
+            color: #526271;
+            margin-bottom: 8px;
+        }
+
+        .bar-track {
+            height: 8px;
+            border-radius: 999px;
+            background: #e8eef1;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--teal);
+        }
+
+        .bus-icon {
+            width: 31px;
+            height: 31px;
+            border-radius: 11px;
+            display: grid;
+            place-items: center;
+            color: #fff;
             font-weight: 800;
+            border: 2px solid #fff;
+            box-shadow: 0 5px 16px rgba(24, 51, 72, 0.25);
+            font-size: 11px;
         }
 
-        .bus-action-badge-bad {
-            color: #c62828;
+        .bus-icon.selected {
+            width: 40px;
+            height: 40px;
+            border-radius: 13px;
+            outline: 3px solid rgba(35, 103, 232, 0.22);
+        }
+
+        .stop-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(30, 56, 73, 0.16);
+        }
+
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .popup-title {
             font-weight: 800;
+            margin-bottom: 6px;
         }
 
-        .bus-action-badge-waiting {
-            color: #ff8c00;
-            font-weight: 800;
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 12px;
+            min-width: 170px;
+            margin: 3px 0;
         }
 
-        @media (max-width: 1400px) {
-            #main-layout {
-                grid-template-columns: 220px 1fr 300px;
+        .popup-row span {
+            color: var(--muted);
+        }
+
+        @media (max-width: 1180px) {
+            body {
+                overflow: auto;
+            }
+
+            .app {
+                height: auto;
+                min-height: 100vh;
+                grid-template-rows: auto auto auto auto;
+            }
+
+            .kpi-strip,
+            .main-grid,
+            .analytics {
+                grid-template-columns: 1fr;
+            }
+
+            .map-wrap {
+                height: 560px;
             }
         }
     </style>
 </head>
 
 <body>
-    <div id="app-shell">
-        <div id="top-bar">
-            <div id="title-block">
-                <div id="main-title">
-                    Smart City Transport <span class="title-accent">Digital Twin</span>
+    <div class="app">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">DT</div>
+                <div>
+                    <div class="brand-title">DigitalTwin / Smart City Transport Digital Twin</div>
+                    <div class="brand-subtitle">Astana Public Transport Monitoring System</div>
                 </div>
             </div>
-            <div id="top-status" style="display: flex; gap: 10px; align-items: center;">
-                <button id="traffic-toggle" class="top-toggle-btn">Traffic Layer: ON</button>
-                <span class="status-chip">LIVE</span>
+            <div class="top-actions">
+                <button id="traffic-toggle" class="toggle-btn">Traffic layer ON</button>
+                <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+                <span id="current-time" class="time-pill">--:--:--</span>
             </div>
-        </div>
+        </header>
 
-        <div id="main-layout">
-            <div id="left-panel">
-                <div class="panel-card">
-                    <div class="panel-title">Network Status</div>
-                    <div id="overview-content">
-
-                        <div class="kpi-grid">
-                            <div class="kpi-card">
-                                <div class="kpi-value" id="metric-active-buses">-</div>
-                                <div class="kpi-label">Active buses</div>
-                            </div>
-
-                            <div class="kpi-card">
-                                <div class="kpi-value" id="metric-routes">-</div>
-                                <div class="kpi-label">Active routes</div>
-                            </div>
-                        </div>
-
-                        <div class="metric-row">
-                            <span>Active decisions</span>
-                            <b id="metric-active-decisions">0</b>
-                        </div>
-                    </div>
+        <section class="kpi-strip">
+            <div class="kpi-card">
+                <div>
+                    <div id="kpi-active-buses" class="kpi-value">0</div>
+                    <div class="kpi-label">Active buses</div>
                 </div>
-
-                <div class="panel-card">
-                    <div class="panel-title">Current Issues</div>
-                    <div class="metric-row">
-                        <span>High traffic buses</span>
-                        <b id="metric-traffic-buses">-</b>
-                    </div>
-                    <div class="widget-subtle" id="metric-traffic-buses-detail"
-                        style="margin-top:2px; margin-bottom:8px; font-size:11px;">
-                        None
-                    </div>
-
-                    <div class="metric-row">
-                        <span>Overcrowded buses</span>
-                        <b id="metric-overcrowded-buses">-</b>
-                    </div>
-                    <div class="widget-subtle" id="metric-overcrowded-buses-detail"
-                        style="margin-top:2px; margin-bottom:8px; font-size:11px;">
-                        None
-                    </div>
-
-                    <div class="metric-row">
-                        <span>Congestion zones</span>
-                        <b id="metric-congestion-zones">0</b>
-                    </div>
-                </div>
-
-                <div class="panel-card">
-                    <div class="panel-title">Active Decisions</div>
-                    <div id="active-decisions-list">
-                        <div class="widget-subtle">No active interventions.</div>
-                    </div>
-                </div>
+                <div class="kpi-accent">B</div>
             </div>
+            <div class="kpi-card">
+                <div>
+                    <div id="kpi-active-routes" class="kpi-value">0</div>
+                    <div class="kpi-label">Active routes</div>
+                </div>
+                <div class="kpi-accent">R</div>
+            </div>
+            <div class="kpi-card">
+                <div>
+                    <div id="kpi-avg-speed" class="kpi-value">0</div>
+                    <div class="kpi-label">Average speed km/h</div>
+                </div>
+                <div class="kpi-accent">V</div>
+            </div>
+            <div class="kpi-card">
+                <div>
+                    <div id="kpi-alerts" class="kpi-value">0</div>
+                    <div class="kpi-label">Active alerts</div>
+                </div>
+                <div class="kpi-accent">A</div>
+            </div>
+            <div class="kpi-card">
+                <div>
+                    <div id="kpi-passengers" class="kpi-value">0</div>
+                    <div class="kpi-label">Visible passengers</div>
+                </div>
+                <div class="kpi-accent">P</div>
+            </div>
+        </section>
 
-            <div id="map-panel">
+        <main class="main-grid">
+            <aside class="panel">
+                <h2 class="panel-title">Route Status</h2>
+                <div id="route-status-list"></div>
+            </aside>
+
+            <section class="map-wrap">
                 <div id="map"></div>
-                <div id="weather-widget" class="map-widget">
-                    Loading weather...
-                </div>
+                <div id="map-mode" class="map-chip">Bus markers and stops visible</div>
+                <div id="weather-widget" class="weather">Astana weather loading</div>
+            </section>
+
+            <aside class="panel">
+                <h2 class="panel-title">Live Telemetry / Operator Panel</h2>
+                <select id="bus-select" class="operator-select">
+                    <option value="Bus_1">Bus_1</option>
+                </select>
+
+                <div id="bus-detail" class="info-grid"></div>
+
+                <div id="decision-center" class="decision-box"></div>
+            </aside>
+        </main>
+
+        <section class="analytics">
+            <div>
+                <h3>Active Recommendations</h3>
+                <div id="active-recommendations" class="issue-list"></div>
             </div>
-
-            <div id="right-panel">
-                <div id="analytics-panel" class="panel-card">
-                    <div class="panel-title">Operator Panel</div>
-
-                    <label for="bus-select" class="panel-label">Select bus</label>
-                    <select id="bus-select" class="panel-select">
-                        <option value="Bus_1">Bus_1</option>
-                    </select>
-
-                    <div class="operator-section-title">Selected Bus State</div>
-                    <div id="overview-tab" class="tab-content active"></div>
-
-                    <div class="operator-section-title">Decision Center</div>
-                    <div id="decision-center" class="widget-card decision-center-card">
-                        <div class="decision-center-title">
-                            <div class="widget-title" style="margin-bottom:0;">Monitoring</div>
-                            <span class="decision-pill">NORMAL</span>
-                        </div>
-                        <div class="widget-subtle">Waiting for live telemetry.</div>
-                    </div>
-
-                    <div class="operator-section-title">Efficiency Impact</div>
-                    <div id="performance-tab" class="tab-content active"></div>
-                    <div id="events-tab" class="tab-content"></div>
-                </div>
+            <div>
+                <h3>Traffic Mix</h3>
+                <div id="traffic-bars"></div>
             </div>
-        </div>
-
-        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-        <script>
-            const API_BASE = "http://127.0.0.1:8000";
-
-            const map = L.map('map').setView([51.13, 71.41], 12);
-
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap &copy; CARTO',
-                subdomains: 'abcd',
-                maxZoom: 20
-            }).addTo(map);
-
-            let markers = {};
-
-            let supportBusMarker = null;
-            let trafficStateMemory = {};
-            let routeLayers = {};
-            let baseRouteLayers = {};
-            let trafficOverlayLayers = {};
-
-            let selectedBusId = "Bus_1";
-            let latestBusesSnapshot = [];
-            let isFetchingBuses = false;
-            let historyLoaded = {};
-            let lastKnownPoints = {};
-            let trafficLayerEnabled = true;
-            let currentSegments = {};
-            let problemZoneLayers = {};
-            let zoneAnimations = {};
-            let detectedZoneCounts = {};
-
-            let stopMarkers = {};
-            let stopLayerGroup = L.layerGroup().addTo(map);
-            let decisionLayerGroup = L.layerGroup().addTo(map);
-            let decisionVisuals = {};
-
-            const SUPPORT_DECISION = {
-                busCapacity: 60,
-                minRouteQueue: 5,
-                supportBusCapacity: 60,
-                supportBusAverageSpeedKmh: 28,
-                dispatchPreparationMinutes: 2,
-                nextRegularBusEtaMinutes: 14,
-                routeShapeFile: "data/routes/route_57/route_57_shape.csv",
-                reserveRouteFractions: [0.0, 0.25, 0.50, 0.75],
-                minUpstreamShapePoints: 35,
-                fallbackLookbackShapePoints: 120,
-                maxNamedReserveDistanceShapePoints: 95,
-                dynamicLookbackShapePoints: 55,
-
-                // Reserve point / route terminal near the first stop
-                depot: {
-                    name: "Route 57 Reserve Depot",
-                    latitude: 51.116987,
-                    longitude: 71.388519
-                }
-            };
-            let busBadgeLayerGroup = L.layerGroup().addTo(map);
-            let busActionBadges = {};
-
-            let supportRouteShape = [];
-            let supportRouteShapeLoading = false;
-            let decisionVisualKeys = {};
-            let supportAnimationTimers = {};
-
-            let analyticsCache = {
-                overview: "",
-                events: "",
-                performanceSummary: ""
-            };
-
-            let trendWidgetCache = {
-                speed: `<div style="color:#6b7d90; font-size:13px;">Loading speed trend...</div>`,
-                passengers: `<div style="color:#6b7d90; font-size:13px;">Loading passenger trend...</div>`
-            };
-
-            function svgToDataUrl(svg) {
-                return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
-            }
-
-            function setupTabs() {
-                const buttons = document.querySelectorAll(".tab-btn");
-                const contents = document.querySelectorAll(".tab-content");
-
-                buttons.forEach(button => {
-                    button.addEventListener("click", () => {
-                        buttons.forEach(btn => btn.classList.remove("active"));
-                        contents.forEach(tab => tab.classList.remove("active"));
-
-                        button.classList.add("active");
-                        document.getElementById(button.dataset.tab).classList.add("active");
-                    });
-                });
-            }
-
-            function weatherCodeToText(code) {
-                if (code === 0) return "Clear";
-                if ([1, 2, 3].includes(code)) return "Cloudy";
-                if ([45, 48].includes(code)) return "Fog";
-                if ([51, 53, 55, 61, 63, 65].includes(code)) return "Rain";
-                if ([71, 73, 75].includes(code)) return "Snow";
-                if ([95, 96, 99].includes(code)) return "Storm";
-                return "Mixed";
-            }
-
-            async function fetchAstanaWeather() {
-                try {
-                    const response = await fetch(`${API_BASE}/api/weather/astana`);
-                    const data = await response.json();
-
-                    if (data.error) return;
-
-                    const html = `
-                    <div style="font-size: 12px; color: #4f6b80; margin-bottom: 3px; font-weight:700;">Astana Weather</div>
-                    <div style="font-size: 22px; font-weight: 700;">${data.currentTemperature}°C</div>
-                    <div style="font-size: 12px; margin: 3px 0 6px 0;">${weatherCodeToText(data.currentWeatherCode)}</div>
-                    <div style="font-size: 12px; color: #66798a;">
-                        H: ${data.todayMax}°C &nbsp; L: ${data.todayMin}°C
-                    </div>
-                    <div style="font-size: 12px; color: #66798a;">
-                        Wind: ${data.currentWindSpeed} km/h
-                    </div>
-                `;
-
-                    document.getElementById("weather-widget").innerHTML = html;
-                } catch (error) {
-                    console.error("Weather fetch error:", error);
-                }
-            }
-
-            function isSupportBus(bus) {
-                return bus && String(bus.busId || "").startsWith("Support_");
-            }
-
-            function getBusColor(bus) {
-                if (isSupportBus(bus)) return "#00e676";
-                if (!bus || !bus.trafficLevel) return "#7f8c8d";
-                if (bus.trafficLevel === "HIGH") return "#e74c3c";
-                if (bus.trafficLevel === "MEDIUM") return "#f39c12";
-                if (bus.trafficLevel === "LOW") return "#2ecc71";
-                return "#7f8c8d";
-            }
-
-            function smoothTrafficLevel(prev, curr) {
-                if (!prev) return curr;
-
-                const levelMap = { LOW: 1, MEDIUM: 2, HIGH: 3 };
-                const prevVal = levelMap[prev] || 1;
-                const currVal = levelMap[curr] || 1;
-                const diff = currVal - prevVal;
-
-                if (Math.abs(diff) > 1) {
-                    return prev;
-                }
-
-                if (curr === "MEDIUM" && prev === "LOW") {
-                    return "LOW";
-                }
-
-                return curr;
-            }
-            function getTrafficSegmentColor(level) {
-                if (level === "HIGH") return "#ff4d4f";
-                if (level === "MEDIUM") return "#f5c542";
-                return null;
-            }
-
-            function detectProblemZones(busId, history) {
-                const zones = [];
-                let currentZone = [];
-
-                for (let i = 0; i < history.length; i++) {
-                    const point = history[i];
-
-                    if (point.trafficLevel === "HIGH") {
-                        currentZone.push(point);
-                    } else {
-                        if (currentZone.length >= 4) {
-                            zones.push([...currentZone]);
-                        }
-                        currentZone = [];
-                    }
-                }
-
-                if (currentZone.length >= 4) {
-                    zones.push([...currentZone]);
-                }
-
-                return zones;
-            }
-
-            function drawProblemZones(busId, zones) {
-                detectedZoneCounts[busId] = zones.length;
-                updateDetectedZonesMetric();
-
-                if (!trafficLayerEnabled) return;
-
-                if (!problemZoneLayers[busId]) {
-                    problemZoneLayers[busId] = L.layerGroup();
-                    if (trafficLayerEnabled) {
-                        problemZoneLayers[busId].addTo(map);
-                    }
-                } else {
-                    problemZoneLayers[busId].clearLayers();
-                }
-
-                if (zoneAnimations[busId]) {
-                    clearInterval(zoneAnimations[busId]);
-                    zoneAnimations[busId] = null;
-                }
-
-                let animatedMarker = null;
-
-                zones.forEach(zone => {
-                    const latlngs = zone.map(p => [p.latitude, p.longitude]);
-
-                    const polyline = L.polyline(latlngs, {
-                        color: "#ff0000",
-                        weight: 14,
-                        opacity: 0.35,
-                        lineCap: "round"
-                    });
-
-                    problemZoneLayers[busId].addLayer(polyline);
-
-                    const mid = zone[Math.floor(zone.length / 2)];
-
-                    const marker = L.circleMarker(
-                        [mid.latitude, mid.longitude],
-                        {
-                            radius: 7,
-                            color: "#ff3b30",
-                            fillColor: "#ff3b30",
-                            fillOpacity: 1,
-                            weight: 2
-                        }
-                    );
-
-                    marker.bindPopup(`
-                    <div style="
-                        background: rgba(255, 255, 255, 0.96);
-                        color: #263748;
-                        padding: 8px 12px;
-                        border-radius: 8px;
-                        border: 1px solid rgba(255, 60, 60, 0.4);
-                        font-weight: 600;
-                        font-size: 13px;
-                    ">
-                        Congestion Zone
-                    </div>
-                `);
-
-                    problemZoneLayers[busId].addLayer(marker);
-
-                    if (!animatedMarker) {
-                        animatedMarker = marker;
-                    }
-                });
-
-                if (animatedMarker) {
-                    let growing = true;
-
-                    zoneAnimations[busId] = setInterval(() => {
-                        const currentRadius = animatedMarker.getRadius();
-
-                        if (growing) {
-                            animatedMarker.setRadius(currentRadius + 0.3);
-                            if (currentRadius > 10) growing = false;
-                        } else {
-                            animatedMarker.setRadius(currentRadius - 0.3);
-                            if (currentRadius < 6) growing = true;
-                        }
-                    }, 80);
-                }
-            }
-            function refreshMapLayout() {
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 120);
-            }
-
-            function updateDetectedZonesMetric() {
-                const totalZones = Object.values(detectedZoneCounts).reduce((sum, value) => sum + value, 0);
-                const el = document.getElementById("metric-congestion-zones");
-                if (el) {
-                    el.textContent = totalZones;
-                }
-            }
-
-            function getStatusClass(type, value) {
-                if (type === "delay") {
-                    if (value === "HIGH") return "status-bad";
-                    if (value === "MEDIUM") return "status-medium";
-                    return "status-good";
-                }
-
-                if (type === "operation") {
-                    if (value === "CONGESTED") return "status-bad";
-                    if (value === "CROWDED" || value === "DELAY_RISK") return "status-medium";
-                    return "status-good";
-                }
-
-                if (type === "traffic") {
-                    if (value === "HIGH") return "status-bad";
-                    if (value === "MEDIUM") return "status-medium";
-                    return "status-good";
-                }
-
-                if (type === "event") {
-                    if (value === "MOVING") return "status-info";
-                    if (value === "STOP") return "status-medium";
-                    if (value === "TRAFFIC") return "status-bad";
-                    if (value === "IDLE") return "status-neutral";
-                }
-
-                return "status-neutral";
-            }
-
-            function ensureRouteLayer(busId) {
-                if (!routeLayers[busId]) {
-                    routeLayers[busId] = L.layerGroup();
-                    if (trafficLayerEnabled) {
-                        routeLayers[busId].addTo(map);
-                    }
-                }
-            }
-
-            function getStableTrafficLevel(busId, newLevel) {
-                if (!trafficStateMemory[busId]) {
-                    trafficStateMemory[busId] = {
-                        level: newLevel,
-                        counter: 0
-                    };
-                    return newLevel;
-                }
-
-                const state = trafficStateMemory[busId];
-
-                if (state.level === newLevel) {
-                    state.counter++;
-                    return state.level;
-                }
-
-                state.counter++;
-
-                if (state.counter >= 5) {
-                    state.level = newLevel;
-                    state.counter = 0;
-                }
-
-                return state.level;
-            }
-
-            function drawTrafficSegment(busId, fromPoint, toPoint) {
-                if (!trafficLayerEnabled) return;
-                if (!fromPoint || !toPoint) return;
-
-                ensureRouteLayer(busId);
-
-                const raw = smoothTrafficLevel(
-                    fromPoint.trafficLevel,
-                    toPoint.trafficLevel
-                );
-
-                const smoothed = getStableTrafficLevel(busId, raw);
-                const color = getTrafficSegmentColor(smoothed);
-                if (!color) {
-                    return;
-                }
-
-                const lastSegment = currentSegments[busId];
-
-                if (lastSegment && lastSegment.color === color) {
-                    lastSegment.polyline.addLatLng([
-                        toPoint.latitude,
-                        toPoint.longitude
-                    ]);
-                    return;
-                }
-
-
-                const coloredLine = L.polyline(
-                    [
-                        [fromPoint.latitude, fromPoint.longitude],
-                        [toPoint.latitude, toPoint.longitude]
-                    ],
-                    {
-                        color: color,
-                        weight: smoothed === "HIGH" ? 7 : 5,
-                        opacity: smoothed === "HIGH" ? 0.9 : 0.65,
-                        lineCap: "round",
-                        lineJoin: "round"
-                    }
-                );
-
-                routeLayers[busId].addLayer(coloredLine);
-
-                currentSegments[busId] = {
-                    color: color,
-                    polyline: coloredLine
-                };
-            }
-
-            function showSupportBus(lat, lon) {
-
-                if (!supportBusMarker) {
-
-                    supportBusMarker = L.circleMarker(
-                        [lat, lon],
-                        {
-                            radius: 10,
-                            color: "#00ff88",
-                            fillColor: "#00ff88",
-                            fillOpacity: 0.9,
-                            weight: 2
-                        }
-                    ).addTo(map);
-
-                    supportBusMarker.bindTooltip(
-                        "Support Bus",
-                        {
-                            permanent: false,
-                            direction: "top"
-                        }
-                    );
-
-                } else {
-
-                    supportBusMarker.setLatLng([lat, lon]);
-
-                }
-            }
-
-            function setTrafficLayerVisibility(enabled) {
-                trafficLayerEnabled = enabled;
-
-                Object.values(trafficOverlayLayers).forEach(layerGroup => {
-                    if (!layerGroup) return;
-
-                    if (enabled) {
-                        layerGroup.addTo(map);
-                    } else {
-                        map.removeLayer(layerGroup);
-                    }
-                });
-
-                Object.values(problemZoneLayers).forEach(layerGroup => {
-                    if (!layerGroup) return;
-
-                    if (enabled) {
-                        layerGroup.addTo(map);
-                    } else {
-                        map.removeLayer(layerGroup);
-                    }
-                });
-
-                const toggleBtn = document.getElementById("traffic-toggle");
-                if (toggleBtn) {
-                    toggleBtn.textContent = enabled ? "Traffic Layer: ON" : "Traffic Layer: OFF";
-                }
-            }
-
-            document.getElementById("traffic-toggle").addEventListener("click", () => {
-                setTrafficLayerVisibility(!trafficLayerEnabled);
-            });
-
-            function getBusIcon(bus) {
-                const isSelected = bus.busId === selectedBusId;
-                const size = isSelected ? 40 : 30;
-                const color = getBusColor(bus);
-                const stroke = isSelected ? "#111111" : "#ffffff";
-                const strokeWidth = isSelected ? 2.5 : 1.5;
-
-                const roleLabel = isSupportBus(bus) ? "S" : "";
-                const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 64 64">
-        <g>
-            <rect x="8" y="8" width="48" height="48" rx="12" fill="${color}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
-            <rect x="18" y="20" width="28" height="14" rx="4" fill="#eaf7ff"/>
-            <rect x="16" y="36" width="32" height="7" rx="3" fill="#ffffff" opacity="0.95"/>
-            <circle cx="22" cy="47" r="4" fill="#1d2a38"/>
-            <circle cx="42" cy="47" r="4" fill="#1d2a38"/>
-            <rect x="28" y="16" width="8" height="4" rx="2" fill="#ffffff" opacity="0.7"/>
-            ${roleLabel ? `<circle cx="50" cy="14" r="10" fill="#ffffff"/><text x="50" y="18" text-anchor="middle" font-size="13" font-weight="900" fill="#00a85a">${roleLabel}</text>` : ""}
-        </g>
-    </svg>`;
-
-                return L.icon({
-                    iconUrl: svgToDataUrl(svg),
-                    iconSize: [size, size],
-                    iconAnchor: [size / 2, size / 2],
-                    popupAnchor: [0, -size / 2]
-                });
-            }
-
-            function buildPopup(bus) {
-                return `
-                <div style="font-family: Arial, sans-serif; min-width: 170px;">
-                    <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
-                        ${bus.busId}
-                    </div>
-                    <div style="font-size: 14px; line-height: 1.5;">
-                        <b>Speed:</b> ${(bus.speed * 3.6).toFixed(1)} km/h<br>
-                        <b>Passengers:</b> ${bus.passengerCount}/60<br>
-                        <b>Role:</b> ${isSupportBus(bus) ? "SUPPORT" : "MAIN"}<br>
-                        <b>Event:</b> ${bus.eventType}<br>
-                        <b>Traffic:</b> ${bus.trafficLevel}<br>
-                        <b>Door:</b> ${bus.doorStatus}<br>
-                        <b>Stop:</b> ${bus.currentStopName || "-"}<br>
-                        <b>Boarded:</b> +${bus.boardingCount || 0}<br>
-                        <b>Alighted:</b> -${bus.alightingCount || 0}<br>
-                        <b>Unserved queue:</b> ${bus.waitingPassengers || 0}<br>
-                        <b>Time:</b> ${bus.timestamp}
-                    </div>
-                </div>
-            `;
-            }
-            function simplifyPoints(points, minDistance = 0.00015) {
-                if (!points || points.length < 2) return points;
-
-                const result = [points[0]];
-
-                for (let i = 1; i < points.length; i++) {
-                    const prev = result[result.length - 1];
-                    const curr = points[i];
-
-                    const dx = curr.latitude - prev.latitude;
-                    const dy = curr.longitude - prev.longitude;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (dist > minDistance) {
-                        result.push(curr);
-                    }
-                }
-
-                return result;
-            }
-
-            function getTrafficOverlayStyle(level) {
-                if (level === "HIGH") {
-                    return {
-                        color: "#ff3b30",
-                        weight: 7,
-                        opacity: 0.85
-                    };
-                }
-
-                if (level === "MEDIUM") {
-                    return {
-                        color: "#ffb020",
-                        weight: 5,
-                        opacity: 0.65
-                    };
-                }
-
-                return null;
-            }
-
-            function ensureTrafficOverlayLayer(busId) {
-                if (!trafficOverlayLayers[busId]) {
-                    trafficOverlayLayers[busId] = L.layerGroup();
-
-                    if (trafficLayerEnabled) {
-                        trafficOverlayLayers[busId].addTo(map);
-                    }
-                }
-
-                return trafficOverlayLayers[busId];
-            }
-
-            function drawBaseRoute(busId, history) {
-                if (!history || history.length < 2) return;
-
-                if (baseRouteLayers[busId]) {
-                    map.removeLayer(baseRouteLayers[busId]);
-                }
-
-                const points = simplifyPoints(history, 0.00012)
-                    .map(p => [p.latitude, p.longitude]);
-
-                baseRouteLayers[busId] = L.polyline(points, {
-                    color: "#7fa6c9",
-                    weight: 4,
-                    opacity: 0.45,
-                    lineCap: "round",
-                    lineJoin: "round"
-                }).addTo(map);
-            }
-
-            function drawTrafficOverlay(busId, history) {
-                if (!history || history.length < 2) return;
-
-                const layer = ensureTrafficOverlayLayer(busId);
-                layer.clearLayers();
-
-                const points = simplifyPoints(history, 0.00012);
-
-                let currentLevel = null;
-                let currentChunk = [];
-
-                function flushChunk() {
-                    if (!currentLevel || currentChunk.length < 2) {
-                        currentChunk = [];
-                        currentLevel = null;
-                        return;
-                    }
-
-                    const style = getTrafficOverlayStyle(currentLevel);
-                    if (!style) {
-                        currentChunk = [];
-                        currentLevel = null;
-                        return;
-                    }
-
-                    L.polyline(currentChunk, {
-                        color: style.color,
-                        weight: style.weight,
-                        opacity: style.opacity,
-                        lineCap: "round",
-                        lineJoin: "round"
-                    }).addTo(layer);
-
-                    currentChunk = [];
-                    currentLevel = null;
-                }
-
-                for (let i = 1; i < points.length; i++) {
-                    const prev = points[i - 1];
-                    const curr = points[i];
-
-                    const level = curr.trafficLevel;
-
-                    if (level !== "HIGH" && level !== "MEDIUM") {
-                        flushChunk();
-                        continue;
-                    }
-
-                    const prevLatLng = [prev.latitude, prev.longitude];
-                    const currLatLng = [curr.latitude, curr.longitude];
-
-                    if (currentLevel !== level) {
-                        flushChunk();
-                        currentLevel = level;
-                        currentChunk = [prevLatLng, currLatLng];
-                    } else {
-                        currentChunk.push(currLatLng);
-                    }
-                }
-
-                flushChunk();
-            }
-
-            function buildSparklineSvg(values, color = "#2ecc71", width = 240, height = 70) {
-                if (!values || values.length === 0) {
-                    return `
-                    <div style="color:#6b7d90; font-size:13px;">
-                        No trend data
-                    </div>
-                `;
-                }
-
-                const min = Math.min(...values);
-                const max = Math.max(...values);
-                const range = max - min || 1;
-
-                const points = values.map((value, index) => {
-                    const x = (index / (values.length - 1 || 1)) * width;
-                    const y = height - ((value - min) / range) * (height - 8) - 4;
-                    return `${x},${y}`;
-                }).join(" ");
-
-                return `
-                <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block; width:100%; height:auto;">
-                    <polyline
-                        fill="none"
-                        stroke="${color}"
-                        stroke-width="3"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        points="${points}"
-                    />
-                </svg>
-            `;
-            }
-
-            function buildEfficiencyGauge(score, label) {
-                const safeScore = Math.max(0, Math.min(100, Number(score) || 0));
-
-                let color = "#2ecc71";
-                if (safeScore < 50) {
-                    color = "#ff3b30";
-                } else if (safeScore < 75) {
-                    color = "#ff9f0a";
-                }
-
-                const centerX = 110;
-                const centerY = 110;
-                const radius = 72;
-
-                const angle = -180 + (safeScore / 100) * 180;
-                const radians = angle * Math.PI / 180;
-
-                const needleX = centerX + radius * 0.78 * Math.cos(radians);
-                const needleY = centerY + radius * 0.78 * Math.sin(radians);
-
-                return `
-            <div class="widget-title">Route Efficiency</div>
-
-            <div style="display:flex; justify-content:center; margin-top:4px;">
-                <svg width="220" height="140" viewBox="0 0 220 140">
-                    <path
-                        d="M 38 110 A 72 72 0 0 1 182 110"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.10)"
-                        stroke-width="12"
-                        stroke-linecap="round"
-                    />
-                    <path
-                        d="M 38 110 A 72 72 0 0 1 182 110"
-                        fill="none"
-                        stroke="${color}"
-                        stroke-width="14"
-                        stroke-linecap="round"
-                        stroke-dasharray="${(safeScore / 100) * 226} 226"
-                    />
-
-                    <line
-                        x1="${centerX}"
-                        y1="${centerY}"
-                        x2="${needleX}"
-                        y2="${needleY}"
-                        stroke="#ffffff"
-                        stroke-width="3"
-                        stroke-linecap="round"
-                    />
-
-                    <circle cx="110" cy="110" r="6" fill="#ffffff" />
-
-                    <text
-                        x="110"
-                        y="82"
-                        text-anchor="middle"
-                        fill="#ffffff"
-                        font-size="26"
-                        font-weight="700"
-                    >
-                        ${safeScore.toFixed(1)}
-                    </text>
-
-                    <text x="30" y="125" fill="#6b7d90" font-size="10">0</text>
-                    <text x="180" y="125" fill="#6b7d90" font-size="10">100</text>
-
-                    <text
-                        x="110"
-                        y="110"
-                        text-anchor="middle"
-                        fill="#6b7d90"
-                        font-size="12"
-                    >
-                        Efficiency Score
-                    </text>
-
-                    <text
-                        x="110"
-                        y="128"
-                        text-anchor="middle"
-                        fill="${color}"
-                        font-size="15"
-                        font-weight="700"
-                    >
-                        ${label}
-                    </text>
-                </svg>
+            <div>
+                <h3>Fleet Snapshot</h3>
+                <div id="fleet-snapshot" class="compact-list"></div>
             </div>
-        `;
+        </section>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:8000";
+        const BUS_CAPACITY = 60;
+
+        const ROUTES = {
+            Route_57: {
+                id: "Route_57",
+                label: "Route 57",
+                color: "#2367e8",
+                shapeFile: "data/routes/route_57/route_57_shape.csv",
+                stopsFile: "data/routes/route_57/route_57_stops.csv",
+                showFullRoute: false,
+                showStops: true
+            },
+            Route_10: {
+                id: "Route_10",
+                label: "Route 10",
+                color: "#0f9faf",
+                shapeFile: "data/routes/route_10/route_10_shape.csv",
+                stopsFile: "data/routes/route_10/route_10_stops.csv",
+                showFullRoute: false,
+                showStops: true
+            },
+            Route_47: {
+                id: "Route_47",
+                label: "Route 47",
+                color: "#7a55d8",
+                shapeFile: "data/routes/route_47/route_47_shape.csv",
+                stopsFile: "data/routes/route_47/route_47_stops.csv",
+                showFullRoute: false,
+                showStops: true
             }
-
-            function ensurePerformanceTabStructure() {
-                const performanceTab = document.getElementById("performance-tab");
-
-                if (!document.getElementById("performance-summary-widget")) {
-                    performanceTab.innerHTML = `
-                    <div id="performance-summary-widget" class="widget-card"></div>
-
-                    <div id="speed-trend-widget" class="widget-card" style="min-height: 220px;">
-                        ${trendWidgetCache.speed}
-                    </div>
-
-                    <div id="passenger-trend-widget" class="widget-card" style="min-height: 220px;">
-                        ${trendWidgetCache.passengers}
-                    </div>
-                `;
-                }
-            }
-
-            function updatePerformanceSummary(avgSpeed, avgPassengers) {
-                ensurePerformanceTabStructure();
-
-                const summaryHtml = `
-                <div class="widget-title">Average Indicators</div>
-
-                <div class="metric-split">
-                    <div class="metric-label">Avg Speed</div>
-                    <div class="metric-value">${(avgSpeed * 3.6).toFixed(1)} km/h</div>
-                </div>
-
-                <div class="metric-split">
-                    <div class="metric-label">Avg Passengers</div>
-                    <div class="metric-value">${avgPassengers}</div>
-                </div>
-            `;
-
-                document.getElementById("performance-summary-widget").innerHTML = summaryHtml;
-                analyticsCache.performanceSummary = summaryHtml;
-            }
-
-            async function fetchBusTrends() {
-                try {
-                    ensurePerformanceTabStructure();
-
-                    const response = await fetch(
-                        `${API_BASE}/api/buses/trends?bus_id=${selectedBusId}&limit=20`
-                    );
-                    const data = await response.json();
-
-                    if (data.error) {
-                        trendWidgetCache.speed = `
-                        <div style="color:#6b7d90; font-size:13px;">No speed trend data</div>
-                    `;
-                        trendWidgetCache.passengers = `
-                        <div style="color:#6b7d90; font-size:13px;">No passenger trend data</div>
-                    `;
-                    } else {
-                        const speedSvg = buildSparklineSvg(data.speeds, "#00c2ff");
-                        const passengerSvg = buildSparklineSvg(data.passengers, "#2ecc71");
-
-                        const latestSpeed = data.speeds.length ? data.speeds[data.speeds.length - 1] : "-";
-                        const latestPassengers = data.passengers.length ? data.passengers[data.passengers.length - 1] : "-";
-
-                        const minSpeed = data.speeds.length ? Math.min(...data.speeds).toFixed(1) : "-";
-                        const maxSpeed = data.speeds.length ? Math.max(...data.speeds).toFixed(1) : "-";
-
-                        const minPassengers = data.passengers.length ? Math.min(...data.passengers) : "-";
-                        const maxPassengers = data.passengers.length ? Math.max(...data.passengers) : "-";
-
-                        trendWidgetCache.speed = `
-                        <div class="widget-title">Speed Trend</div>
-                        <div class="widget-value-lg">${latestSpeed} km/h</div>
-                        <div class="widget-subtle" style="margin-bottom:10px;">Recent movement speed</div>
-                        ${speedSvg}
-                        <div class="widget-subtle" style="margin-top:8px;">
-                            Min: ${minSpeed} km/h &nbsp; | &nbsp; Max: ${maxSpeed} km/h
-                        </div>
-                    `;
-
-                        trendWidgetCache.passengers = `
-                        <div class="widget-title">Passenger Trend</div>
-                        <div class="widget-value-lg">${latestPassengers}</div>
-                        <div class="widget-subtle" style="margin-bottom:10px;">Recent passenger load</div>
-                        ${passengerSvg}
-                        <div class="widget-subtle" style="margin-top:8px;">
-                            Min: ${minPassengers} &nbsp; | &nbsp; Max: ${maxPassengers}
-                        </div>
-                    `;
-                    }
-
-                    const speedWidget = document.getElementById("speed-trend-widget");
-                    const passengerWidget = document.getElementById("passenger-trend-widget");
-
-                    if (speedWidget) speedWidget.innerHTML = trendWidgetCache.speed;
-                    if (passengerWidget) passengerWidget.innerHTML = trendWidgetCache.passengers;
-                } catch (error) {
-                    console.error("Trend fetch error:", error);
-                }
-            }
-
-            async function loadBusHistoryOnce(busId) {
-                if (historyLoaded[busId]) return;
-
-                try {
-                    currentSegments[busId] = null;
-                    trafficStateMemory[busId] = null;
-
-                    const response = await fetch(`${API_BASE}/api/buses/history?bus_id=${busId}&limit=5000`);
-                    const history = await response.json();
-
-                    if (!Array.isArray(history) || history.length === 0) {
-                        historyLoaded[busId] = true;
-                        return;
-                    }
-
-                    const zones = detectProblemZones(busId, history);
-                    drawProblemZones(busId, zones);
-
-                    drawBaseRoute(busId, history);
-                    drawTrafficOverlay(busId, history);
-
-                    lastKnownPoints[busId] = history[history.length - 1];
-                    historyLoaded[busId] = true;
-                } catch (error) {
-                    console.error("Error loading initial history:", error);
-                }
-            }
-
-            function appendPointToRoute(bus) {
-                const busId = bus.busId;
-
-                const currentPoint = {
-                    latitude: bus.latitude,
-                    longitude: bus.longitude,
-                    trafficLevel: bus.trafficLevel
-                };
-
-                const lastPoint = lastKnownPoints[busId];
-
-                if (!lastPoint) {
-                    lastKnownPoints[busId] = currentPoint;
-                    return;
-                }
-
-                if (
-                    lastPoint.latitude === currentPoint.latitude &&
-                    lastPoint.longitude === currentPoint.longitude
-                ) {
-                    return;
-                }
-
-                const currentLatLng = [currentPoint.latitude, currentPoint.longitude];
-                const lastLatLng = [lastPoint.latitude, lastPoint.longitude];
-
-                // Extend clean base route live
-                if (baseRouteLayers[busId]) {
-                    baseRouteLayers[busId].addLatLng(currentLatLng);
-                }
-
-                // Add only problematic live traffic segments
-                const style = getTrafficOverlayStyle(currentPoint.trafficLevel);
-
-                if (style) {
-                    const layer = ensureTrafficOverlayLayer(busId);
-
-                    L.polyline([lastLatLng, currentLatLng], {
-                        color: style.color,
-                        weight: style.weight,
-                        opacity: style.opacity,
-                        lineCap: "round",
-                        lineJoin: "round"
-                    }).addTo(layer);
-                }
-
-                lastKnownPoints[busId] = currentPoint;
-            }
-
-            function renderStopsOnMap(stopsData) {
-                stopLayerGroup.clearLayers();
-                stopMarkers = {};
-
-                if (!stopsData || !Array.isArray(stopsData.stops)) return;
-
-                const currentIndex = stopsData.currentStopIndex;
-
-                stopsData.stops.forEach((stop, index) => {
-                    const isCurrent = index === currentIndex;
-                    const isNext = currentIndex !== null && index === currentIndex + 1;
-
-                    let className = "stop-square-marker";
-                    if (isCurrent) {
-                        className += " current";
-                    } else if (isNext) {
-                        className += " next";
-                    }
-
-                    const icon = L.divIcon({
-                        className: "",
-                        html: `<div class="${className}"></div>`,
-                        iconSize: isCurrent ? [14, 14] : isNext ? [13, 13] : [12, 12],
-                        iconAnchor: isCurrent ? [7, 7] : isNext ? [6.5, 6.5] : [6, 6]
-                    });
-
-                    const marker = L.marker([stop.latitude, stop.longitude], { icon });
-
-                    marker.bindPopup(`
-            <div style="font-family: Arial, sans-serif; min-width: 180px;">
-                <div style="font-size:16px; font-weight:700; margin-bottom:6px;">
-                    ${stop.name}
-                </div>
-                <div style="font-size:13px; line-height:1.5;">
-                    <b>Order:</b> ${stop.id}<br>
-                    <b>Lat:</b> ${stop.latitude}<br>
-                    <b>Lon:</b> ${stop.longitude}
-                </div>
-            </div>
-        `);
-
-                    marker.addTo(stopLayerGroup);
-                    stopMarkers[stop.id] = marker;
-                });
-            }
-            function clearBusActionBadge(busId) {
-                if (busActionBadges[busId]) {
-                    busBadgeLayerGroup.removeLayer(busActionBadges[busId]);
-                    delete busActionBadges[busId];
-                }
-            }
-
-            function getBadgeLatLng(bus) {
-                const lat = Number(bus.latitude);
-                const lon = Number(bus.longitude);
-
-                // small visual offset above the bus marker
-                const offsetMetersY = 45;
-                const dLat = offsetMetersY / 111320;
-
-                return [lat + dLat, lon];
-            }
-
-            function drawBusActionBadge(bus) {
-                const busId = bus.busId;
-
-                clearBusActionBadge(busId);
-
-                const isStopping = bus.eventType === "STOP" || bus.doorStatus === "OPEN";
-
-                if (!isStopping) {
-                    return;
-                }
-
-                const boarding = Number(bus.boardingCount || 0);
-                const alighting = Number(bus.alightingCount || 0);
-                const waiting = Number(bus.waitingPassengers || 0);
-                const dwell = Number(bus.dwellRemaining || 0);
-
-                const stopName = bus.currentStopName || "Bus stop";
-
-                const html = `
-        <div class="bus-action-badge">
-            <div class="bus-action-badge-title">🚪 Door OPEN</div>
-
-            <div style="font-weight:700; margin-bottom:4px;">
-                ${stopName}
-            </div>
-
-            <div class="bus-action-badge-row">
-                <span>Boarded</span>
-                <span class="bus-action-badge-good">+${boarding}</span>
-            </div>
-
-            <div class="bus-action-badge-row">
-                <span>Alighted</span>
-                <span class="bus-action-badge-bad">-${alighting}</span>
-            </div>
-
-            <div class="bus-action-badge-row">
-                <span>Unserved queue</span>
-                <span class="bus-action-badge-waiting">${waiting}</span>
-            </div>
-
-            <div class="bus-action-badge-row">
-                <span>Dwell</span>
-                <span>${dwell}s</span>
-            </div>
-        </div>
-    `;
-
-                const icon = L.divIcon({
-                    className: "",
-                    html,
-                    iconSize: [150, 95],
-                    iconAnchor: [75, 105]
-                });
-
-                const badge = L.marker(getBadgeLatLng(bus), {
-                    icon,
-                    interactive: false
-                });
-
-                badge.addTo(busBadgeLayerGroup);
-                busActionBadges[busId] = badge;
-            }
-
-            function clearDecisionVisual(busId) {
-                stopSupportBusAnimation(busId);
-
-                if (decisionVisuals[busId]) {
-                    decisionLayerGroup.removeLayer(decisionVisuals[busId]);
-                    delete decisionVisuals[busId];
-                }
-
-                if (decisionVisualKeys[busId]) {
-                    delete decisionVisualKeys[busId];
-                }
-            }
-
-            function offsetLatLng(lat, lon, metersX, metersY) {
-                const dLat = metersY / 111320;
-                const dLon = metersX / (111320 * Math.cos(lat * Math.PI / 180));
-
-                return [lat + dLat, lon + dLon];
-            }
-
-            function getDecisionLabelTopLeftLatLng(targetLatLng) {
-                const mapSize = map.getSize();
-                const targetPoint = map.latLngToContainerPoint(
-                    L.latLng(targetLatLng[0], targetLatLng[1])
-                );
-
-                const cardWidth = 245;
-                const cardHeight = 205;
-                const margin = 24;
-
-                // Prefer placing the card above-right of the problem stop.
-                let left = targetPoint.x + 34;
-                let top = targetPoint.y - cardHeight - 34;
-
-                // If it would collide with the right side / weather widget, move it left.
-                if (left + cardWidth > mapSize.x - margin) {
-                    left = targetPoint.x - cardWidth - 34;
-                }
-
-                // Keep inside the visible map area.
-                if (left < margin) {
-                    left = margin;
-                }
-
-                if (top < margin) {
-                    top = targetPoint.y + 48;
-                }
-
-                if (top + cardHeight > mapSize.y - margin) {
-                    top = Math.max(margin, mapSize.y - cardHeight - margin);
-                }
-
-                const latLng = map.containerPointToLatLng(L.point(left, top));
-                return [latLng.lat, latLng.lng];
-            }
-
-            function calculateDistanceKm(fromLatLng, toLatLng) {
-                const earthRadiusKm = 6371;
-                const lat1 = Number(fromLatLng[0]) * Math.PI / 180;
-                const lat2 = Number(toLatLng[0]) * Math.PI / 180;
-                const deltaLat = (Number(toLatLng[0]) - Number(fromLatLng[0])) * Math.PI / 180;
-                const deltaLon = (Number(toLatLng[1]) - Number(fromLatLng[1])) * Math.PI / 180;
-
-                const a =
-                    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-                    Math.cos(lat1) * Math.cos(lat2) *
-                    Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
-
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-                return earthRadiusKm * c;
-            }
-
-            function calculatePathDistanceKm(pathLatLngs) {
-                if (!Array.isArray(pathLatLngs) || pathLatLngs.length < 2) {
-                    return 0;
-                }
-
-                let total = 0;
-
-                for (let i = 1; i < pathLatLngs.length; i++) {
-                    total += calculateDistanceKm(pathLatLngs[i - 1], pathLatLngs[i]);
-                }
-
-                return total;
-            }
-
-            function calculateSupportImpactByDistance(distanceKm, unservedQueue) {
-                const travelMinutes = Math.ceil(
-                    (distanceKm / SUPPORT_DECISION.supportBusAverageSpeedKmh) * 60
-                );
-
-                const etaMinutes = Math.max(
-                    1,
-                    travelMinutes + SUPPORT_DECISION.dispatchPreparationMinutes
-                );
-
-                const supportCapacity = SUPPORT_DECISION.supportBusCapacity;
-                const servedPassengers = Math.min(unservedQueue, supportCapacity);
-                const queueAfterSupport = Math.max(0, unservedQueue - supportCapacity);
-                const waitingReductionMinutes = Math.max(
-                    0,
-                    SUPPORT_DECISION.nextRegularBusEtaMinutes - etaMinutes
-                );
-
-                let impactText = "Unserved cleared";
-                if (queueAfterSupport > 0) {
-                    impactText = "Unserved reduced";
-                }
-
-                return {
-                    distanceKm,
-                    etaMinutes,
-                    supportCapacity,
-                    servedPassengers,
-                    queueAfterSupport,
-                    waitingReductionMinutes,
-                    impactText
-                };
-            }
-
-            function calculateSupportImpact(depotLatLng, targetLatLng, unservedQueue, pathDistanceKm = null) {
-                const distanceKm = Number.isFinite(pathDistanceKm)
-                    ? pathDistanceKm
-                    : calculateDistanceKm(depotLatLng, targetLatLng);
-
-                return calculateSupportImpactByDistance(distanceKm, unservedQueue);
-            }
-
-            async function loadSupportRouteShape() {
-                if (supportRouteShapeLoading || supportRouteShape.length > 0) {
-                    return supportRouteShape;
-                }
-
-                supportRouteShapeLoading = true;
-
-                try {
-                    const response = await fetch(SUPPORT_DECISION.routeShapeFile);
-
-                    if (!response.ok) {
-                        throw new Error(`Route shape file not found: ${SUPPORT_DECISION.routeShapeFile}`);
-                    }
-
-                    const csvText = await response.text();
-                    const lines = csvText
-                        .split(/\r?\n/)
-                        .map(line => line.trim())
-                        .filter(Boolean);
-
-                    if (lines.length < 2) {
-                        throw new Error("Route shape CSV is empty");
-                    }
-
-                    const delimiter = lines[0].includes(";") ? ";" : ",";
-                    const headers = lines[0]
-                        .replace(/^\uFEFF/, "")
-                        .split(delimiter)
-                        .map(header => header.trim().toLowerCase());
-
-                    const latIndex = headers.indexOf("latitude");
-                    const lonIndex = headers.indexOf("longitude");
-                    const sequenceIndex = headers.indexOf("point_sequence");
-
-                    if (latIndex === -1 || lonIndex === -1) {
-                        throw new Error("Route shape CSV must contain latitude and longitude columns");
-                    }
-
-                    supportRouteShape = lines.slice(1)
-                        .map((line, index) => {
-                            const cells = line.split(delimiter).map(cell => cell.trim());
-
-                            return {
-                                pointSequence: sequenceIndex >= 0
-                                    ? Number(cells[sequenceIndex])
-                                    : index,
-                                latitude: Number(cells[latIndex]),
-                                longitude: Number(cells[lonIndex])
-                            };
-                        })
-                        .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
-                        .sort((a, b) => a.pointSequence - b.pointSequence);
-
-                    console.log(`Support route shape loaded: ${supportRouteShape.length} points`);
-                } catch (error) {
-                    console.warn("Support route shape loading failed:", error);
-                    supportRouteShape = [];
-                } finally {
-                    supportRouteShapeLoading = false;
-                }
-
-                return supportRouteShape;
-            }
-
-            function findNearestSupportShapeIndex(latLng) {
-                if (!supportRouteShape.length) {
-                    return -1;
-                }
-
-                let bestIndex = 0;
-                let bestDistance = Infinity;
-
-                supportRouteShape.forEach((point, index) => {
-                    const distance = calculateDistanceKm(
-                        [point.latitude, point.longitude],
-                        latLng
-                    );
-
-                    if (distance < bestDistance) {
-                        bestDistance = distance;
-                        bestIndex = index;
-                    }
-                });
-
-                return bestIndex;
-            }
-
-            function getSupportReserveShapeCandidates() {
-                if (!supportRouteShape.length) {
-                    return [0];
-                }
-
-                const maxIndex = supportRouteShape.length - 1;
-                const fractions = SUPPORT_DECISION.reserveRouteFractions || [0];
-
-                return [...new Set(
-                    fractions.map(fraction => {
-                        const index = Math.round(maxIndex * Number(fraction));
-                        return Math.max(0, Math.min(maxIndex, index));
-                    })
-                )].sort((a, b) => a - b);
-            }
-
-            function chooseSupportReserveShapeIndex(targetShapeIndex) {
-                if (!supportRouteShape.length) {
-                    return 0;
-                }
-
-                const minGap = Number(SUPPORT_DECISION.minUpstreamShapePoints || 0);
-                const upstreamLimit = Number(targetShapeIndex) - minGap;
-                const candidates = getSupportReserveShapeCandidates();
-
-                const upstreamCandidates = candidates.filter(index => index <= upstreamLimit);
-
-                let selectedIndex = null;
-
-                if (upstreamCandidates.length > 0) {
-                    selectedIndex = upstreamCandidates[upstreamCandidates.length - 1];
-                } else {
-                    const fallbackLookback = Number(SUPPORT_DECISION.fallbackLookbackShapePoints || 80);
-                    selectedIndex = Math.max(0, Number(targetShapeIndex) - fallbackLookback);
-                }
-
-                const maxDistance = Number(SUPPORT_DECISION.maxNamedReserveDistanceShapePoints || 95);
-                const distancePoints = Number(targetShapeIndex) - Number(selectedIndex);
-
-                if (distancePoints > maxDistance) {
-                    const dynamicLookback = Number(SUPPORT_DECISION.dynamicLookbackShapePoints || 55);
-                    return Math.max(0, Number(targetShapeIndex) - dynamicLookback);
-                }
-
-                return selectedIndex;
-            }
-
-            function getSupportPathInfo(targetLatLng) {
-                if (!supportRouteShape.length) {
-                    const depotLatLng = [
-                        SUPPORT_DECISION.depot.latitude,
-                        SUPPORT_DECISION.depot.longitude
-                    ];
-
-                    return {
-                        hasRouteShape: false,
-                        originLatLng: depotLatLng,
-                        targetLatLng,
-                        pathLatLngs: [],
-                        distanceKm: calculateDistanceKm(depotLatLng, targetLatLng)
-                    };
-                }
-
-                const targetIndex = findNearestSupportShapeIndex(targetLatLng);
-                const safeTargetIndex = targetIndex >= 0 ? targetIndex : 0;
-                const reserveIndex = chooseSupportReserveShapeIndex(safeTargetIndex);
-
-                const startIndex = Math.min(reserveIndex, safeTargetIndex);
-                const endIndex = Math.max(reserveIndex, safeTargetIndex);
-
-                let segment = supportRouteShape
-                    .slice(startIndex, endIndex + 1)
-                    .map(point => [point.latitude, point.longitude]);
-
-                if (safeTargetIndex < reserveIndex) {
-                    segment = segment.reverse();
-                }
-
-                if (segment.length === 0) {
-                    segment = [[
-                        supportRouteShape[reserveIndex].latitude,
-                        supportRouteShape[reserveIndex].longitude
-                    ]];
-                }
-
-                // Snap the last point to the actual overloaded stop/bus location for visual precision.
-                if (segment.length > 0) {
-                    segment[segment.length - 1] = targetLatLng;
-                }
-
-                const originLatLng = segment[0];
-
-                return {
-                    hasRouteShape: true,
-                    originLatLng,
-                    targetLatLng,
-                    pathLatLngs: segment,
-                    distanceKm: calculatePathDistanceKm(segment)
-                };
-            }
-
-            function interpolateLatLng(fromLatLng, toLatLng, t) {
-                return [
-                    fromLatLng[0] + (toLatLng[0] - fromLatLng[0]) * t,
-                    fromLatLng[1] + (toLatLng[1] - fromLatLng[1]) * t
-                ];
-            }
-
-            function buildAnimatedSupportPath(pathLatLngs, stepMeters = 35) {
-                if (!Array.isArray(pathLatLngs) || pathLatLngs.length < 2) {
-                    return pathLatLngs || [];
-                }
-
-                const animatedPath = [pathLatLngs[0]];
-
-                for (let i = 1; i < pathLatLngs.length; i++) {
-                    const fromLatLng = pathLatLngs[i - 1];
-                    const toLatLng = pathLatLngs[i];
-                    const distanceMeters = calculateDistanceKm(fromLatLng, toLatLng) * 1000;
-                    const steps = Math.max(1, Math.ceil(distanceMeters / stepMeters));
-
-                    for (let step = 1; step <= steps; step++) {
-                        animatedPath.push(interpolateLatLng(fromLatLng, toLatLng, step / steps));
-                    }
-                }
-
-                return animatedPath;
-            }
-
-            function startSupportBusAnimation(busId, supportMarker, pathLatLngs) {
-                if (!Array.isArray(pathLatLngs) || pathLatLngs.length < 2) {
-                    return;
-                }
-
-                const animatedPath = buildAnimatedSupportPath(pathLatLngs, 35);
-
-                if (animatedPath.length < 2) {
-                    return;
-                }
-
-                let index = 0;
-                supportMarker.setLatLng(animatedPath[0]);
-
-                supportAnimationTimers[busId] = setInterval(() => {
+        };
+
+        const trafficColors = {
+            LOW: "#20a464",
+            MEDIUM: "#d98412",
+            HIGH: "#d94141",
+            UNKNOWN: "#8da1ad"
+        };
+
+        const map = L.map("map", { zoomControl: true }).setView([51.13, 71.43], 12);
+
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+            attribution: "&copy; OpenStreetMap &copy; CARTO",
+            subdomains: "abcd",
+            maxZoom: 20
+        }).addTo(map);
+
+        const routeData = {};
+        const fullRouteLayers = {};
+        const stopLayers = {};
+        const trafficSectionLayers = {};
+        const busMarkers = {};
+        const lastBusPoints = {};
+
+        let latestBuses = [];
+        let selectedBusId = "Bus_1";
+        let trafficLayerEnabled = true;
+        let isFetchingBuses = false;
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function normalizeRouteId(routeId) {
+            return String(routeId || "").replace(/_SUPPORT$/, "");
+        }
+
+        function isSupportBus(bus) {
+            return String(bus?.busId || "").startsWith("Support_") || String(bus?.routeId || "").endsWith("_SUPPORT");
+        }
+
+        function num(value, fallback = 0) {
+            const number = Number(value);
+            return Number.isFinite(number) ? number : fallback;
+        }
+
+        function speedKmh(bus) {
+            return num(bus?.speed) * 3.6;
+        }
+
+        function getRouteConfig(routeId) {
+            return ROUTES[normalizeRouteId(routeId)] || ROUTES.Route_57;
+        }
+
+        function getRouteColor(routeId) {
+            return getRouteConfig(routeId).color;
+        }
+
+        function getTrafficColor(level) {
+            return trafficColors[String(level || "UNKNOWN").toUpperCase()] || trafficColors.UNKNOWN;
+        }
+
+        function splitCsvLine(line, delimiter) {
+            const result = [];
+            let current = "";
+            let quoted = false;
+
+            for (let index = 0; index < line.length; index += 1) {
+                const char = line[index];
+                const next = line[index + 1];
+
+                if (char === '"' && quoted && next === '"') {
+                    current += '"';
                     index += 1;
-
-                    if (index >= animatedPath.length) {
-                        supportMarker.setLatLng(animatedPath[animatedPath.length - 1]);
-                        clearInterval(supportAnimationTimers[busId]);
-                        supportAnimationTimers[busId] = null;
-                        return;
-                    }
-
-                    supportMarker.setLatLng(animatedPath[index]);
-                }, 120);
-            }
-
-            function stopSupportBusAnimation(busId) {
-                if (supportAnimationTimers[busId]) {
-                    clearInterval(supportAnimationTimers[busId]);
-                    supportAnimationTimers[busId] = null;
+                } else if (char === '"') {
+                    quoted = !quoted;
+                } else if (char === delimiter && !quoted) {
+                    result.push(current.trim());
+                    current = "";
+                } else {
+                    current += char;
                 }
             }
 
-            function getSupportImpactClass(queueAfterSupport) {
-                return queueAfterSupport === 0 ? "dispatch-label-good" : "dispatch-label-bad";
-            }
+            result.push(current.trim());
+            return result;
+        }
 
-            function getSupportDecisionType(bus) {
-                const isAtStop = bus.eventType === "STOP" || bus.doorStatus === "OPEN";
-                const passengers = Number(bus.passengerCount || 0);
-                const unservedQueue = Number(bus.waitingPassengers || 0);
+        function parseCsv(text) {
+            const clean = String(text || "").replace(/^\uFEFF/, "").trim();
+            if (!clean) return [];
 
-                if (!isAtStop) {
-                    return "NORMAL";
-                }
+            const lines = clean.split(/\r?\n/).filter(Boolean);
+            const delimiter = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ";" : ",";
+            const headers = splitCsvLine(lines[0], delimiter).map(header => header.trim().toLowerCase());
 
-                const isFull = passengers >= SUPPORT_DECISION.busCapacity;
-                const hasUnservedQueue = unservedQueue >= SUPPORT_DECISION.minRouteQueue;
-
-                if (isFull && hasUnservedQueue) {
-                    const targetLatLng = [Number(bus.latitude), Number(bus.longitude)];
-                    const supportPathInfo = getSupportPathInfo(targetLatLng);
-                    const impact = calculateSupportImpactByDistance(
-                        supportPathInfo.distanceKm,
-                        unservedQueue
-                    );
-
-                    if (impact.etaMinutes < SUPPORT_DECISION.nextRegularBusEtaMinutes) {
-                        return "DISPATCH_SUPPORT_BUS";
-                    }
-
-                    return "REGULAR_BUS_MONITOR";
-                }
-
-                if (isFull) {
-                    return "FULL_BUS_MONITOR";
-                }
-
-                if (hasUnservedQueue) {
-                    return "QUEUE_MONITOR";
-                }
-
-                return "NORMAL";
-            }
-
-            function escapeHtml(value) {
-                return String(value ?? "").replace(/[&<>"']/g, char => ({
-                    "&": "&amp;",
-                    "<": "&lt;",
-                    ">": "&gt;",
-                    "\"": "&quot;",
-                    "'": "&#039;"
-                }[char]));
-            }
-
-            function getBaseRouteId(routeId) {
-                return String(routeId || "").replace(/_SUPPORT$/, "");
-            }
-
-            function getDisplayedActiveRouteCount(buses, fallbackCount = 0) {
-                const routeIds = new Set();
-
-                (Array.isArray(buses) ? buses : []).forEach(bus => {
-                    if (bus && bus.routeId) {
-                        routeIds.add(getBaseRouteId(bus.routeId));
-                    }
+            return lines.slice(1).map(line => {
+                const values = splitCsvLine(line, delimiter);
+                const row = {};
+                headers.forEach((header, index) => {
+                    row[header] = values[index];
                 });
+                return row;
+            });
+        }
 
-                const fallbackNumber = Number(fallbackCount);
-                return routeIds.size || (Number.isFinite(fallbackNumber) ? fallbackNumber : 0);
+        function pick(row, names) {
+            for (const name of names) {
+                const key = Object.keys(row).find(candidate => candidate === name || candidate.replace(/\s+/g, "_") === name);
+                if (key && row[key] !== undefined && row[key] !== "") return row[key];
+            }
+            return undefined;
+        }
+
+        async function fetchCsv(path) {
+            const response = await fetch(path);
+            if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+            return parseCsv(await response.text());
+        }
+
+        async function loadRouteAssets(route) {
+            const data = {
+                shape: [],
+                stops: [],
+                hasShape: false,
+                hasStops: false
+            };
+
+            try {
+                const rows = await fetchCsv(route.shapeFile);
+                data.shape = rows
+                    .map(row => ({
+                        sequence: num(pick(row, ["point_sequence", "sequence", "id"])),
+                        latitude: num(pick(row, ["latitude", "lat"])),
+                        longitude: num(pick(row, ["longitude", "lon", "lng"]))
+                    }))
+                    .filter(point => point.latitude && point.longitude)
+                    .sort((a, b) => a.sequence - b.sequence);
+                data.hasShape = data.shape.length > 1;
+            } catch (error) {
+                console.warn(`${route.id} shape not loaded:`, error);
             }
 
-            function getSelectedBusSnapshot() {
-                return latestBusesSnapshot.find(bus => bus.busId === selectedBusId) || null;
+            try {
+                const rows = await fetchCsv(route.stopsFile);
+                data.stops = rows
+                    .map(row => ({
+                        sequence: num(pick(row, ["stop_sequence", "sequence", "id"])),
+                        name: pick(row, ["stop_name", "name", "stop"]) || "Stop",
+                        latitude: num(pick(row, ["latitude", "lat"])),
+                        longitude: num(pick(row, ["longitude", "lon", "lng"])),
+                        demandLevel: String(pick(row, ["demand_level", "demand"]) || "MEDIUM").toUpperCase()
+                    }))
+                    .filter(stop => stop.latitude && stop.longitude)
+                    .sort((a, b) => a.sequence - b.sequence);
+                data.hasStops = data.stops.length > 0;
+            } catch (error) {
+                console.warn(`${route.id} stops not loaded:`, error);
             }
 
-            function getActiveReroutingDecision(bus) {
-                const recommendation = bus && bus.reroutingRecommendation;
-                const decisionType = recommendation && recommendation.decisionType;
-                const hasReason = Array.isArray(recommendation && recommendation.reason)
-                    ? recommendation.reason.length > 0
-                    : Boolean(recommendation && recommendation.reason);
+            routeData[route.id] = data;
+        }
 
-                if (!recommendation || decisionType === "NORMAL" || !hasReason) {
-                    return null;
+        async function loadAllRouteAssets() {
+            await Promise.all(Object.values(ROUTES).map(loadRouteAssets));
+            renderRouteControls();
+            renderStaticRouteLayers();
+        }
+
+        function makeStopIcon(route) {
+            return L.divIcon({
+                className: "",
+                html: `<div class="stop-dot" style="background:${route.color}"></div>`,
+                iconSize: [12, 12],
+                iconAnchor: [6, 6],
+                popupAnchor: [0, -8]
+            });
+        }
+
+        function makeBusIcon(bus) {
+            const support = isSupportBus(bus);
+            const selected = bus.busId === selectedBusId;
+            const background = support ? "#1a9c62" : getTrafficColor(bus.trafficLevel);
+            const label = support ? "S" : String(normalizeRouteId(bus.routeId)).replace("Route_", "");
+
+            return L.divIcon({
+                className: "",
+                html: `<div class="bus-icon ${selected ? "selected" : ""}" style="background:${background}">${escapeHtml(label)}</div>`,
+                iconSize: selected ? [40, 40] : [31, 31],
+                iconAnchor: selected ? [20, 20] : [15, 15],
+                popupAnchor: [0, -18]
+            });
+        }
+
+        function compactPopup(bus) {
+            const role = isSupportBus(bus) ? "SUPPORT" : "MAIN";
+            return `
+                <div>
+                    <div class="popup-title">${escapeHtml(bus.busId)} <span style="color:${getRouteColor(bus.routeId)}">${escapeHtml(normalizeRouteId(bus.routeId))}</span></div>
+                    <div class="popup-row"><span>Role</span><b>${role}</b></div>
+                    <div class="popup-row"><span>Speed</span><b>${speedKmh(bus).toFixed(1)} km/h</b></div>
+                    <div class="popup-row"><span>Passengers</span><b>${num(bus.passengerCount)}/${BUS_CAPACITY}</b></div>
+                    <div class="popup-row"><span>Event</span><b>${escapeHtml(bus.eventType || "-")}</b></div>
+                    <div class="popup-row"><span>Traffic</span><b>${escapeHtml(bus.trafficLevel || "-")}</b></div>
+                    <div class="popup-row"><span>Stop</span><b>${escapeHtml(bus.currentStopName || "-")}</b></div>
+                </div>
+            `;
+        }
+
+        function renderStaticRouteLayers() {
+            Object.values(fullRouteLayers).forEach(layer => map.removeLayer(layer));
+            Object.values(stopLayers).forEach(layer => map.removeLayer(layer));
+
+            for (const route of Object.values(ROUTES)) {
+                const data = routeData[route.id] || {};
+
+                const fullLayer = L.layerGroup();
+                if (route.showFullRoute && data.shape?.length > 1) {
+                    L.polyline(data.shape.map(point => [point.latitude, point.longitude]), {
+                        color: route.color,
+                        weight: 4,
+                        opacity: 0.55,
+                        lineCap: "round",
+                        lineJoin: "round"
+                    }).addTo(fullLayer);
+                    fullLayer.addTo(map);
                 }
+                fullRouteLayers[route.id] = fullLayer;
 
-                return recommendation;
+                const stopLayer = L.layerGroup();
+                if (route.showStops && data.stops?.length) {
+                    data.stops.forEach(stop => {
+                        L.marker([stop.latitude, stop.longitude], { icon: makeStopIcon(route) })
+                            .bindPopup(`
+                                <div>
+                                    <div class="popup-title">${escapeHtml(stop.name)}</div>
+                                    <div class="popup-row"><span>Route</span><b>${escapeHtml(route.id)}</b></div>
+                                    <div class="popup-row"><span>Stop</span><b>${stop.sequence}</b></div>
+                                    <div class="popup-row"><span>Demand</span><b>${escapeHtml(stop.demandLevel)}</b></div>
+                                </div>
+                            `)
+                            .addTo(stopLayer);
+                    });
+                    stopLayer.addTo(map);
+                }
+                stopLayers[route.id] = stopLayer;
+            }
+        }
+
+        function distanceSquared(latA, lonA, latB, lonB) {
+            const dLat = latA - latB;
+            const dLon = lonA - lonB;
+            return dLat * dLat + dLon * dLon;
+        }
+
+        function nearestShapeIndex(routeId, latitude, longitude) {
+            const shape = routeData[routeId]?.shape || [];
+            if (!shape.length) return -1;
+
+            let bestIndex = 0;
+            let bestDistance = Infinity;
+
+            shape.forEach((point, index) => {
+                const dist = distanceSquared(point.latitude, point.longitude, latitude, longitude);
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestIndex = index;
+                }
+            });
+
+            return bestIndex;
+        }
+
+        function clearTrafficSections() {
+            Object.values(trafficSectionLayers).forEach(layer => {
+                layer.clearLayers();
+                map.removeLayer(layer);
+            });
+        }
+
+        function renderTrafficSections() {
+            clearTrafficSections();
+            const mapMode = document.getElementById("map-mode");
+
+            if (!trafficLayerEnabled) {
+                mapMode.textContent = "Bus markers and stops visible";
+                return;
             }
 
-            function getDecisionText(bus) {
-                const supportDecision = getSupportDecisionType(bus);
-                const reroutingDecision = getActiveReroutingDecision(bus);
+            latestBuses.forEach(bus => {
+                const routeId = normalizeRouteId(bus.routeId);
+                const shape = routeData[routeId]?.shape || [];
+                if (shape.length < 2) return;
 
-                if (supportDecision === "DISPATCH_SUPPORT_BUS") {
-                    return {
-                        title: "Support bus required",
-                        pill: "ACTION",
-                        tone: "risk",
-                        body: `${bus.currentStopName || "Current stop"} has ${bus.waitingPassengers || 0} unserved passengers. Dispatch support and continue monitoring capacity.`
-                    };
+                const layerKey = bus.busId;
+                const layer = L.layerGroup();
+                const index = nearestShapeIndex(routeId, num(bus.latitude), num(bus.longitude));
+                if (index < 0) return;
+
+                const start = Math.max(0, index - 4);
+                const end = Math.min(shape.length - 1, index + 8);
+                const color = isSupportBus(bus) ? "#1a9c62" : getTrafficColor(bus.trafficLevel);
+                const section = shape.slice(start, end + 1).map(point => [point.latitude, point.longitude]);
+
+                if (section.length > 1) {
+                    L.polyline(section, {
+                        color,
+                        weight: bus.busId === selectedBusId ? 7 : 5,
+                        opacity: bus.busId === selectedBusId ? 0.88 : 0.68,
+                        lineCap: "round",
+                        lineJoin: "round"
+                    }).addTo(layer);
                 }
 
-                if (supportDecision === "FULL_BUS_MONITOR") {
-                    return {
-                        title: "Capacity risk",
-                        pill: "MONITOR",
-                        tone: "warning",
-                        body: `${bus.busId} is at capacity. Watch the next stops for unserved queue formation.`
-                    };
+                const previous = lastBusPoints[bus.busId];
+                if (previous && normalizeRouteId(previous.routeId) === routeId) {
+                    L.polyline([[previous.latitude, previous.longitude], [num(bus.latitude), num(bus.longitude)]], {
+                        color,
+                        weight: 3,
+                        opacity: 0.75,
+                        dashArray: "6 7"
+                    }).addTo(layer);
                 }
 
-                if (supportDecision === "QUEUE_MONITOR" || supportDecision === "REGULAR_BUS_MONITOR") {
-                    return {
-                        title: "Passenger queue detected",
-                        pill: "MONITOR",
-                        tone: "warning",
-                        body: `${bus.currentStopName || "Current stop"} has waiting passengers. Support dispatch is shown only when it improves service.`
-                    };
+                trafficSectionLayers[layerKey] = layer;
+                layer.addTo(map);
+            });
+
+            mapMode.textContent = trafficLayerEnabled
+                ? "Local traffic sections around active buses"
+                : "Bus markers and stops visible";
+        }
+
+        function renderRouteControls() {
+            const container = document.getElementById("route-status-list");
+            const byRoute = aggregateRoutes();
+
+            container.innerHTML = Object.values(ROUTES).map(route => {
+                const stats = byRoute[route.id] || { buses: [], avgLoad: 0, status: "Standby", statusClass: "" };
+                const data = routeData[route.id] || {};
+                const traffic = stats.status;
+                return `
+                    <div class="route-card">
+                        <div class="route-head">
+                            <div class="route-name">
+                                <span class="route-color" style="background:${route.color}"></span>
+                                <span>${escapeHtml(route.id)}</span>
+                            </div>
+                            <span class="route-status ${stats.statusClass}">${escapeHtml(traffic)}</span>
+                        </div>
+                        <div class="route-stats">
+                            <div class="mini-stat"><span>Buses</span><b>${stats.buses.length}</b></div>
+                            <div class="mini-stat"><span>Avg load</span><b>${stats.avgLoad}%</b></div>
+                            <div class="mini-stat"><span>Stops</span><b>${data.stops?.length || 0}</b></div>
+                            <div class="mini-stat"><span>Shape</span><b>${data.shape?.length ? "OK" : "Missing"}</b></div>
+                        </div>
+                        <div class="route-actions">
+                            <button class="small-btn ${route.showFullRoute ? "active" : ""}" data-action="route" data-route="${route.id}">
+                                ${route.showFullRoute ? "Hide full route" : "Show full route"}
+                            </button>
+                            <button class="small-btn ${route.showStops ? "active" : ""}" data-action="stops" data-route="${route.id}">
+                                ${route.showStops ? "Hide stops" : "Show stops"}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+            container.querySelectorAll("button[data-route]").forEach(button => {
+                button.addEventListener("click", () => {
+                    const route = ROUTES[button.dataset.route];
+                    if (!route) return;
+                    if (button.dataset.action === "route") route.showFullRoute = !route.showFullRoute;
+                    if (button.dataset.action === "stops") route.showStops = !route.showStops;
+                    renderRouteControls();
+                    renderStaticRouteLayers();
+                    renderTrafficSections();
+                });
+            });
+        }
+
+        function aggregateRoutes() {
+            const result = {};
+            Object.keys(ROUTES).forEach(routeId => {
+                result[routeId] = { buses: [], avgLoad: 0, status: "Standby", statusClass: "" };
+            });
+
+            latestBuses.forEach(bus => {
+                const routeId = normalizeRouteId(bus.routeId);
+                if (!result[routeId]) return;
+                result[routeId].buses.push(bus);
+            });
+
+            Object.entries(result).forEach(([, stats]) => {
+                if (!stats.buses.length) return;
+
+                const avgPassengers = stats.buses.reduce((sum, bus) => sum + num(bus.passengerCount), 0) / stats.buses.length;
+                stats.avgLoad = Math.round((avgPassengers / BUS_CAPACITY) * 100);
+
+                const hasHighTraffic = stats.buses.some(bus => bus.trafficLevel === "HIGH");
+                const hasQueue = stats.buses.some(bus => num(bus.waitingPassengers) > 0);
+                if (hasQueue) {
+                    stats.status = "Queue";
+                    stats.statusClass = "danger";
+                } else if (hasHighTraffic) {
+                    stats.status = "Delay risk";
+                    stats.statusClass = "warn";
+                } else {
+                    stats.status = "Normal";
+                    stats.statusClass = "";
                 }
+            });
 
-                if (reroutingDecision) {
-                    const reason = Array.isArray(reroutingDecision.reason)
-                        ? reroutingDecision.reason.join(", ")
-                        : String(reroutingDecision.reason || "Congestion ahead");
+            return result;
+        }
 
-                    return {
-                        title: "Rerouting watch",
-                        pill: reroutingDecision.decisionType || "MONITOR",
-                        tone: "warning",
-                        body: `${reason}. No reroute is forced unless a safe predefined alternative exists.`
-                    };
+        function ensureBusOption(bus) {
+            const select = document.getElementById("bus-select");
+            const exists = Array.from(select.options).some(option => option.value === bus.busId);
+            if (exists) return;
+
+            const option = document.createElement("option");
+            option.value = bus.busId;
+            option.textContent = `${bus.busId} (${normalizeRouteId(bus.routeId)})`;
+            select.appendChild(option);
+        }
+
+        function syncSelectedBus() {
+            if (latestBuses.some(bus => bus.busId === selectedBusId)) return;
+            if (latestBuses.some(bus => bus.busId === "Bus_1")) {
+                selectedBusId = "Bus_1";
+            } else if (latestBuses.length) {
+                selectedBusId = latestBuses[0].busId;
+            }
+            document.getElementById("bus-select").value = selectedBusId;
+        }
+
+        function selectedBus() {
+            return latestBuses.find(bus => bus.busId === selectedBusId) || null;
+        }
+
+        function updateMarkers() {
+            const liveIds = new Set(latestBuses.map(bus => bus.busId));
+
+            Object.keys(busMarkers).forEach(busId => {
+                if (!liveIds.has(busId)) {
+                    map.removeLayer(busMarkers[busId]);
+                    delete busMarkers[busId];
                 }
+            });
 
-                if (isSupportBus(bus)) {
-                    return {
-                        title: "Support operating",
-                        pill: "SUPPORT",
-                        tone: "normal",
-                        body: `${bus.busId} is active on ${getBaseRouteId(bus.routeId)} and continuing service after the support pickup.`
-                    };
+            latestBuses.forEach(bus => {
+                ensureBusOption(bus);
+
+                const latLng = [num(bus.latitude), num(bus.longitude)];
+                const popup = compactPopup(bus);
+
+                if (busMarkers[bus.busId]) {
+                    busMarkers[bus.busId].setLatLng(latLng);
+                    busMarkers[bus.busId].setIcon(makeBusIcon(bus));
+                    busMarkers[bus.busId].setPopupContent(popup);
+                } else {
+                    const marker = L.marker(latLng, { icon: makeBusIcon(bus) })
+                        .bindPopup(popup)
+                        .addTo(map);
+
+                    marker.on("click", () => {
+                        selectedBusId = bus.busId;
+                        document.getElementById("bus-select").value = selectedBusId;
+                        renderAll();
+                        marker.openPopup();
+                        map.setView(marker.getLatLng(), 14);
+                    });
+
+                    busMarkers[bus.busId] = marker;
                 }
+            });
+        }
 
+        function updateKpis() {
+            const baseRoutes = new Set(latestBuses.map(bus => normalizeRouteId(bus.routeId)).filter(Boolean));
+            const avgSpeed = latestBuses.length
+                ? latestBuses.reduce((sum, bus) => sum + speedKmh(bus), 0) / latestBuses.length
+                : 0;
+            const passengers = latestBuses.reduce((sum, bus) => sum + num(bus.passengerCount), 0);
+            const alerts = latestBuses.filter(bus =>
+                bus.trafficLevel === "HIGH" ||
+                num(bus.waitingPassengers) > 0 ||
+                num(bus.passengerCount) >= BUS_CAPACITY
+            ).length;
+
+            document.getElementById("kpi-active-buses").textContent = latestBuses.length;
+            document.getElementById("kpi-active-routes").textContent = baseRoutes.size;
+            document.getElementById("kpi-avg-speed").textContent = avgSpeed.toFixed(1);
+            document.getElementById("kpi-alerts").textContent = alerts;
+            document.getElementById("kpi-passengers").textContent = passengers;
+        }
+
+        function tile(label, value) {
+            return `<div class="info-tile"><span>${label}</span><b>${escapeHtml(value)}</b></div>`;
+        }
+
+        function updateBusDetail() {
+            const bus = selectedBus();
+            const container = document.getElementById("bus-detail");
+
+            if (!bus) {
+                container.innerHTML = `<div class="info-tile" style="grid-column:1/-1"><span>Status</span><b>Waiting for live telemetry</b></div>`;
+                return;
+            }
+
+            const role = isSupportBus(bus) ? "SUPPORT" : "MAIN";
+            container.innerHTML = [
+                tile("Bus ID", bus.busId),
+                tile("Route", normalizeRouteId(bus.routeId)),
+                tile("Role", role),
+                tile("Speed", `${speedKmh(bus).toFixed(1)} km/h`),
+                tile("Passengers", `${num(bus.passengerCount)}/${BUS_CAPACITY}`),
+                tile("Event", bus.eventType || "-"),
+                tile("Door", bus.doorStatus || "-"),
+                tile("Traffic", bus.trafficLevel || "-"),
+                tile("Current stop", bus.currentStopName || "-"),
+                tile("Boarded", `+${num(bus.boardingCount)}`),
+                tile("Alighted", `-${num(bus.alightingCount)}`),
+                tile("Unserved", num(bus.waitingPassengers)),
+                tile("Dwell", `${num(bus.dwellRemaining)} s`)
+            ].join("");
+        }
+
+        function getDecision(bus) {
+            if (!bus) {
                 return {
-                    title: "Route normal",
-                    pill: "NORMAL",
-                    tone: "normal",
-                    body: `${bus.busId} is moving under normal Digital Twin monitoring.`
+                    title: "Waiting for telemetry",
+                    pill: "STANDBY",
+                    className: "",
+                    rows: [["Trigger", "No live bus selected"], ["Support ETA", "Standby"]]
                 };
             }
 
-            function updateActiveDecisionsPanel() {
-                const listEl = document.getElementById("active-decisions-list");
-                const countEl = document.getElementById("metric-active-decisions");
-                if (!listEl) return;
-
-                const activeItems = latestBusesSnapshot
-                    .map(bus => ({ bus, decision: getDecisionText(bus) }))
-                    .filter(item => item.decision.tone !== "normal");
-
-                if (countEl) {
-                    countEl.textContent = activeItems.length;
-                }
-
-                if (!activeItems.length) {
-                    listEl.innerHTML = `<div class="widget-subtle">No active interventions.</div>`;
-                    return;
-                }
-
-                listEl.innerHTML = activeItems.slice(0, 3).map(item => `
-                    <div class="metric-row">
-                        <span>${escapeHtml(item.bus.busId)}</span>
-                        <b class="${item.decision.tone === "risk" ? "status-bad" : "status-medium"}">
-                            ${escapeHtml(item.decision.title)}
-                        </b>
-                    </div>
-                `).join("");
+            if (isSupportBus(bus)) {
+                return {
+                    title: "Support operating",
+                    pill: "SUPPORT",
+                    className: "support",
+                    rows: [
+                        ["Status", bus.eventType === "STOP" ? "boarding / dwell" : "continuing service"],
+                        ["Capacity", `${num(bus.passengerCount)}/${BUS_CAPACITY}`],
+                        ["Unserved queue", num(bus.waitingPassengers)]
+                    ]
+                };
             }
 
-            // Decision Center update: this is the single place that converts live telemetry
-            // into the operator-facing support/rerouting recommendation card.
-            function updateDecisionCenter(bus = getSelectedBusSnapshot()) {
-                const center = document.getElementById("decision-center");
-                if (!center) return;
+            const queue = num(bus.waitingPassengers);
+            const full = num(bus.passengerCount) >= BUS_CAPACITY;
 
-                if (!bus) {
-                    center.className = "widget-card decision-center-card";
-                    center.innerHTML = `
-                        <div class="decision-center-title">
-                            <div class="widget-title" style="margin-bottom:0;">Monitoring</div>
-                            <span class="decision-pill">NORMAL</span>
-                        </div>
-                        <div class="widget-subtle">Waiting for live telemetry.</div>
-                    `;
-                    return;
-                }
+            if (queue > 0 && full) {
+                return {
+                    title: "Dispatch support bus",
+                    pill: "ACTION",
+                    className: "warn",
+                    rows: [
+                        ["Trigger", "capacity full + unserved queue"],
+                        ["Queue after support", queue],
+                        ["Support ETA", "Operational standby"]
+                    ]
+                };
+            }
 
-                const decision = getDecisionText(bus);
-                const toneClass = decision.tone === "risk"
-                    ? " risk"
-                    : decision.tone === "warning"
-                        ? " warning"
-                        : "";
-                const pillClass = decision.tone === "risk"
-                    ? " risk"
-                    : decision.tone === "warning"
-                        ? " warning"
-                        : "";
+            if (queue > 0) {
+                return {
+                    title: "Monitor queue",
+                    pill: "WATCH",
+                    className: "warn",
+                    rows: [
+                        ["Trigger", "waiting passengers"],
+                        ["Unserved queue", queue],
+                        ["Support ETA", "Standby"]
+                    ]
+                };
+            }
 
-                center.className = `widget-card decision-center-card${toneClass}`;
-                center.innerHTML = `
-                    <div class="decision-center-title">
-                        <div class="widget-title" style="margin-bottom:0;">${escapeHtml(decision.title)}</div>
-                        <span class="decision-pill${pillClass}">${escapeHtml(decision.pill)}</span>
+            return {
+                title: "No intervention",
+                pill: "NORMAL",
+                className: "",
+                rows: [
+                    ["Trigger", "normal operation"],
+                    ["Support ETA", "Standby"]
+                ]
+            };
+        }
+
+        function updateDecisionCenter() {
+            const decision = getDecision(selectedBus());
+            document.getElementById("decision-center").innerHTML = `
+                <div class="decision-title">
+                    <span>${escapeHtml(decision.title)}</span>
+                    <span class="decision-pill ${decision.className}">${escapeHtml(decision.pill)}</span>
+                </div>
+                ${decision.rows.map(row => `
+                    <div class="decision-line">
+                        <span>${escapeHtml(row[0])}</span>
+                        <b>${escapeHtml(row[1])}</b>
                     </div>
-                    <div class="widget-subtle">${escapeHtml(decision.body)}</div>
+                `).join("")}
+            `;
+        }
+
+        function updateRecommendations() {
+            const active = latestBuses
+                .map(bus => ({ bus, decision: getDecision(bus) }))
+                .filter(item => item.decision.pill !== "NORMAL" && item.decision.pill !== "STANDBY");
+
+            const container = document.getElementById("active-recommendations");
+            if (!active.length) {
+                container.innerHTML = `<div class="issue-item"><span>No active intervention</span><b>Normal</b></div>`;
+                return;
+            }
+
+            container.innerHTML = active.slice(0, 5).map(item => `
+                <div class="issue-item">
+                    <span>${escapeHtml(item.bus.busId)} / ${escapeHtml(normalizeRouteId(item.bus.routeId))}</span>
+                    <b>${escapeHtml(item.decision.title)}</b>
+                </div>
+            `).join("");
+        }
+
+        function updateAnalytics() {
+            const counts = { LOW: 0, MEDIUM: 0, HIGH: 0 };
+            latestBuses.forEach(bus => {
+                const level = String(bus.trafficLevel || "").toUpperCase();
+                if (counts[level] !== undefined) counts[level] += 1;
+            });
+
+            const total = Math.max(latestBuses.length, 1);
+            document.getElementById("traffic-bars").innerHTML = ["LOW", "MEDIUM", "HIGH"].map(level => {
+                const percent = Math.round((counts[level] / total) * 100);
+                return `
+                    <div class="bar-row">
+                        <span>${level}</span>
+                        <div class="bar-track"><div class="bar-fill" style="width:${percent}%; background:${getTrafficColor(level)}"></div></div>
+                        <b>${percent}%</b>
+                    </div>
                 `;
-            }
-
-            function drawDecisionVisual(bus) {
-                const busId = bus.busId;
-                const decisionType = getSupportDecisionType(bus);
-
-                if (decisionType === "NORMAL") {
-                    clearDecisionVisual(busId);
-                    return;
-                }
-
-                const busLatLng = [Number(bus.latitude), Number(bus.longitude)];
-                const decisionKey = [
-                    decisionType,
-                    bus.currentStopName || "",
-                    Math.round(busLatLng[0] * 100000),
-                    Math.round(busLatLng[1] * 100000)
-                ].join("|");
-
-                if (decisionVisuals[busId] && decisionVisualKeys[busId] === decisionKey) {
-                    return;
-                }
-
-                clearDecisionVisual(busId);
-
-                const layer = L.layerGroup().addTo(decisionLayerGroup);
-                decisionVisuals[busId] = layer;
-                decisionVisualKeys[busId] = decisionKey;
-
-                if (decisionType === "FULL_BUS_MONITOR" || decisionType === "QUEUE_MONITOR" || decisionType === "REGULAR_BUS_MONITOR") {
-                    const color = decisionType === "FULL_BUS_MONITOR" ? "#ff3b30" : "#ff9f0a";
-
-                    L.circle(busLatLng, {
-                        radius: 95,
-                        color,
-                        fillColor: color,
-                        fillOpacity: 0.13,
-                        weight: 2,
-                        opacity: 0.85
-                    }).addTo(layer);
-
-                    return;
-                }
-
-                if (decisionType !== "DISPATCH_SUPPORT_BUS") {
-                    return;
-                }
-
-                const depotLatLng = [
-                    SUPPORT_DECISION.depot.latitude,
-                    SUPPORT_DECISION.depot.longitude
-                ];
-
-                const targetLatLng = busLatLng;
-                const supportPathInfo = getSupportPathInfo(targetLatLng);
-                const supportOriginLatLng = supportPathInfo.originLatLng;
-                const labelLatLng = getDecisionLabelTopLeftLatLng(targetLatLng);
-
-                const riskCircle = L.circle(targetLatLng, {
-                    radius: 130,
-                    color: "#ff3b30",
-                    fillColor: "#ff3b30",
-                    fillOpacity: 0.14,
-                    weight: 2,
-                    opacity: 0.9
-                });
-
-                const targetIcon = L.divIcon({
-                    className: "",
-                    html: `<div class="dispatch-target-marker">!</div>`,
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
-                });
-
-                const targetMarker = L.marker(targetLatLng, {
-                    icon: targetIcon,
-                    interactive: false
-                });
-
-                let actualSupportPathLine = null;
-
-                if (supportPathInfo.hasRouteShape && supportPathInfo.pathLatLngs.length >= 2) {
-                    actualSupportPathLine = L.polyline(
-                        supportPathInfo.pathLatLngs,
-                        {
-                            color: "#00e676",
-                            weight: 5,
-                            opacity: 0.82,
-                            lineCap: "round",
-                            lineJoin: "round"
-                        }
-                    );
-                }
-
-                const unservedQueue = Number(bus.waitingPassengers || 0);
-                const impact = calculateSupportImpactByDistance(
-                    supportPathInfo.distanceKm,
-                    unservedQueue
-                );
-
-                const labelHtml = `
-        <div class="dispatch-label">
-            <div class="dispatch-label-title">Support Bus Recommended</div>
-
-            <div style="font-weight:800; margin-bottom:5px;">
-                ${bus.currentStopName || "Current stop"}
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Reason</span>
-                <span class="dispatch-label-bad">Capacity full</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Passengers</span>
-                <span>${bus.passengerCount}/${SUPPORT_DECISION.busCapacity}</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Unserved queue</span>
-                <span class="dispatch-label-bad">${unservedQueue}</span>
-            </div>
-
-            <div style="height:1px; background:rgba(0,0,0,0.12); margin:6px 0;"></div>
-
-            <div class="dispatch-label-row">
-                <span>Next regular bus</span>
-                <span>${SUPPORT_DECISION.nextRegularBusEtaMinutes} min</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Support ETA</span>
-                <span>${impact.etaMinutes} min</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Route path</span>
-                <span>${impact.distanceKm.toFixed(1)} km</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Origin</span>
-                <span>nearby standby</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Support capacity</span>
-                <span>${impact.supportCapacity}</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Queue after</span>
-                <span class="${getSupportImpactClass(impact.queueAfterSupport)}">${impact.queueAfterSupport}</span>
-            </div>
-
-            <div class="dispatch-label-row">
-                <span>Wait reduced</span>
-                <span class="dispatch-label-good">${impact.waitingReductionMinutes} min</span>
-            </div>
-        </div>
-    `;
-
-                const labelIcon = L.divIcon({
-                    className: "",
-                    html: labelHtml,
-                    iconSize: [245, 205],
-                    iconAnchor: [0, 0]
-                });
-
-                const labelMarker = L.marker(labelLatLng, {
-                    icon: labelIcon,
-                    interactive: false
-                });
-
-                riskCircle.addTo(layer);
-                if (actualSupportPathLine) {
-                    actualSupportPathLine.addTo(layer);
-                }
-                targetMarker.addTo(layer);
-                labelMarker.addTo(layer);
-            }
-
-            function ensureBusOption(busId) {
-                const select = document.getElementById("bus-select");
-                if (!select) return;
-
-                const exists = Array.from(select.options).some(option => option.value === busId);
-                if (exists) return;
-
-                const option = document.createElement("option");
-                option.value = busId;
-                option.textContent = busId;
-                select.appendChild(option);
-            }
-
-            async function fetchBuses() {
-                if (isFetchingBuses) return;
-                isFetchingBuses = true;
-
-                try {
-                    const response = await fetch(`${API_BASE}/api/buses/latest`);
-                    const data = await response.json();
-                    latestBusesSnapshot = Array.isArray(data) ? data : [];
-                    const routesEl = document.getElementById("metric-routes");
-                    if (routesEl) {
-                        routesEl.textContent = getDisplayedActiveRouteCount(latestBusesSnapshot, routesEl.textContent);
-                    }
-
-                    for (const bus of latestBusesSnapshot) {
-                        ensureBusOption(bus.busId);
-
-                        const lat = bus.latitude;
-                        const lon = bus.longitude;
-                        const popupContent = buildPopup(bus);
-
-                        await loadBusHistoryOnce(bus.busId);
-
-                        if (markers[bus.busId]) {
-                            markers[bus.busId].setLatLng([lat, lon]);
-                            markers[bus.busId].setIcon(getBusIcon(bus));
-                            markers[bus.busId].setPopupContent(popupContent);
-                        } else {
-                            const marker = L.marker([lat, lon], {
-                                icon: getBusIcon(bus)
-                            }).addTo(map);
-
-                            marker.bindPopup(popupContent);
-
-                            marker.on("click", () => {
-                                selectedBusId = bus.busId;
-
-                                trendWidgetCache.speed = `<div style="color:#6b7d90; font-size:13px;">Loading speed trend...</div>`;
-                                trendWidgetCache.passengers = `<div style="color:#6b7d90; font-size:13px;">Loading passenger trend...</div>`;
-
-                                ensurePerformanceTabStructure();
-                                document.getElementById("speed-trend-widget").innerHTML = trendWidgetCache.speed;
-                                document.getElementById("passenger-trend-widget").innerHTML = trendWidgetCache.passengers;
-
-                                refreshSelectedBusPanel();
-                                map.setView(marker.getLatLng(), 14);
-                                marker.openPopup();
-
-                                setTimeout(fetchBusTrends, 150);
-                            });
-
-                            markers[bus.busId] = marker;
-                        }
-
-                        appendPointToRoute(bus);
-
-                        if (bus.busId === selectedBusId) {
-                            const decisionType = getSupportDecisionType(bus);
-
-                            if (decisionType === "DISPATCH_SUPPORT_BUS") {
-                                clearBusActionBadge(bus.busId);
-                            } else {
-                                drawBusActionBadge(bus);
-                            }
-
-                            drawDecisionVisual(bus);
-                        } else if (isSupportBus(bus)) {
-                            // Support buses are real vehicles now.
-                            // Show boarding/alighting badge when they stop, even if Bus_1 is selected.
-                            drawBusActionBadge(bus);
-                            clearDecisionVisual(bus.busId);
-                        } else {
-                            clearBusActionBadge(bus.busId);
-                            clearDecisionVisual(bus.busId);
-                        }
-
-                    }
-
-                    updateActiveDecisionsPanel();
-                    updateDecisionCenter();
-                } catch (error) {
-                    console.error("Error fetching latest bus data:", error);
-                } finally {
-                    isFetchingBuses = false;
-                }
-            }
-
-            async function fetchAnalytics() {
-                try {
-                    const analyticsResponse = await fetch(
-                        `${API_BASE}/api/buses/analytics?bus_id=${selectedBusId}`
-                    );
-                    const data = await analyticsResponse.json();
-
-                    if (data.error) {
-                        if (analyticsCache.overview) {
-                            document.getElementById("overview-tab").innerHTML = analyticsCache.overview;
-                        }
-                        if (analyticsCache.events) {
-                            document.getElementById("events-tab").innerHTML = analyticsCache.events;
-                        }
-                        if (analyticsCache.performanceSummary) {
-                            updatePerformanceSummaryFromCache();
-                        }
-                        return;
-                    }
-
-                    let operationalInsight = "Stable movement with normal operating conditions.";
-
-                    if (data.operationalStatus === "CONGESTED") {
-                        operationalInsight = "Congestion is currently affecting route movement.";
-                    } else if (data.operationalStatus === "CROWDED") {
-                        operationalInsight = "Passenger load is high and may affect service comfort.";
-                    } else if (data.delayRisk === "HIGH") {
-                        operationalInsight = "High delay risk due to traffic exposure and stop frequency.";
-                    } else if (data.delayRisk === "MEDIUM") {
-                        operationalInsight = "Moderate delay risk detected on the current route.";
-                    } else if (data.eventDistribution.TRAFFIC >= 10) {
-                        operationalInsight = "Frequent traffic interruptions are present on this route.";
-                    } else if (data.eventDistribution.STOP >= 10) {
-                        operationalInsight = "Stop-heavy movement pattern is affecting route flow.";
-                    } else if (data.routeEfficiencyLabel === "GOOD") {
-                        operationalInsight = "Route performance is currently efficient and stable.";
-                    } else if (data.routeEfficiencyLabel === "MODERATE") {
-                        operationalInsight = "Route performance is moderate with some operational friction.";
-                    }
-
-                    const overviewHtml = `
-            <div class="widget-card">
-                <div class="widget-title">Current State</div>
-
-                <div class="status-grid">
-                    <div class="status-tile">
-                        <div class="status-label">Delay Risk</div>
-                        <div class="status-value ${getStatusClass('delay', data.delayRisk)}">
-                            ${data.delayRisk}
-                        </div>
-                    </div>
-
-                    <div class="status-tile">
-                        <div class="status-label">Operation</div>
-                        <div class="status-value ${getStatusClass('operation', data.operationalStatus)}">
-                            ${data.operationalStatus}
-                        </div>
-                    </div>
-
-                    <div class="status-tile">
-                        <div class="status-label">Traffic</div>
-                        <div class="status-value ${getStatusClass('traffic', data.currentTrafficLevel)}">
-                            ${data.currentTrafficLevel}
-                        </div>
-                    </div>
-
-                    <div class="status-tile">
-                        <div class="status-label">Event</div>
-                        <div class="status-value ${getStatusClass('event', data.currentEventType)}">
-                            ${data.currentEventType}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="widget-card">
-                ${buildEfficiencyGauge(data.routeEfficiencyScore, data.routeEfficiencyLabel)}
-            </div>
-        `;
-
-                    const eventsHtml = `
-            <div class="widget-card">
-                <div class="widget-title">Event Distribution</div>
-
-                <div class="metric-label">Moving (${data.eventDistribution.MOVING}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.eventDistribution.MOVING}%; background:#2ecc71;"></div>
-                </div>
-
-                <div class="metric-label">Traffic (${data.eventDistribution.TRAFFIC}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.eventDistribution.TRAFFIC}%; background:#ff3b30;"></div>
-                </div>
-
-                <div class="metric-label">Stop (${data.eventDistribution.STOP}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.eventDistribution.STOP}%; background:#f1c40f;"></div>
-                </div>
-
-                <div class="metric-label">Idle (${data.eventDistribution.IDLE}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.eventDistribution.IDLE}%; background:#ff9f0a;"></div>
-                </div>
-            </div>
-
-            <div class="widget-card">
-                <div class="widget-title">Traffic Distribution</div>
-
-                <div class="metric-label">Low Traffic (${data.trafficDistribution.LOW}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.trafficDistribution.LOW}%; background:#2ecc71;"></div>
-                </div>
-
-                <div class="metric-label">Medium Traffic (${data.trafficDistribution.MEDIUM}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.trafficDistribution.MEDIUM}%; background:#ff9f0a;"></div>
-                </div>
-
-                <div class="metric-label">High Traffic (${data.trafficDistribution.HIGH}%)</div>
-                <div class="traffic-bar">
-                    <div class="traffic-fill" style="width:${data.trafficDistribution.HIGH}%; background:#ff3b30;"></div>
-                </div>
-            </div>
-
-            <div class="widget-card">
-                <div class="widget-title">Operational Insight</div>
-                <div>${operationalInsight}</div>
-            </div>
-        `;
-
-                    document.getElementById("overview-tab").innerHTML = overviewHtml;
-                    document.getElementById("events-tab").innerHTML = eventsHtml;
-
-                    analyticsCache.overview = overviewHtml;
-                    analyticsCache.events = eventsHtml;
-
-                    updatePerformanceSummary(data.avgSpeed, data.avgPassengers);
-                } catch (err) {
-                    console.error("Analytics error:", err);
-
-                    if (analyticsCache.overview) {
-                        document.getElementById("overview-tab").innerHTML = analyticsCache.overview;
-                    }
-
-                    if (analyticsCache.events) {
-                        document.getElementById("events-tab").innerHTML = analyticsCache.events;
-                    }
-
-                    if (analyticsCache.performanceSummary) {
-                        updatePerformanceSummaryFromCache();
-                    }
-                }
-            }
-
-            function updatePerformanceSummaryFromCache() {
-                ensurePerformanceTabStructure();
-                document.getElementById("performance-summary-widget").innerHTML = analyticsCache.performanceSummary;
-            }
-
-            async function fetchOverviewMetrics() {
-                try {
-                    const response = await fetch(`${API_BASE}/api/system/overview`);
-                    const data = await response.json();
-
-                    if (data.error) return;
-
-                    const activeRoutes = getDisplayedActiveRouteCount(latestBusesSnapshot, data.routes);
-                    const activeBusesEl = document.getElementById("metric-active-buses");
-                    const routesEl = document.getElementById("metric-routes");
-                    const trafficEl = document.getElementById("metric-traffic-buses");
-                    const overcrowdedEl = document.getElementById("metric-overcrowded-buses");
-
-                    if (activeBusesEl) activeBusesEl.textContent = data.activeBuses;
-                    if (routesEl) routesEl.textContent = activeRoutes;
-                    if (trafficEl) trafficEl.textContent = data.highTrafficBusesCount;
-                    if (overcrowdedEl) overcrowdedEl.textContent = data.overcrowdedBusesCount;
-
-                    const highTrafficIds = Array.isArray(data.highTrafficBusIds) ? data.highTrafficBusIds : [];
-                    const overcrowdedIds = Array.isArray(data.overcrowdedBusIds) ? data.overcrowdedBusIds : [];
-
-                    const highTrafficList = highTrafficIds.length
-                        ? highTrafficIds.join(", ")
-                        : "None";
-
-                    const overcrowdedList = overcrowdedIds.length
-                        ? overcrowdedIds.join(", ")
-                        : "None";
-
-                    const trafficDetailEl = document.getElementById("metric-traffic-buses-detail");
-                    const overcrowdedDetailEl = document.getElementById("metric-overcrowded-buses-detail");
-
-                    if (trafficDetailEl) {
-                        trafficDetailEl.textContent = highTrafficList;
-                    }
-
-                    if (overcrowdedDetailEl) {
-                        overcrowdedDetailEl.textContent = overcrowdedList;
-                    }
-                } catch (error) {
-                    console.error("Overview metrics error:", error);
-                }
-            }
-
-            function renderRouteProgressWidget(stopsData) {
-                const container = document.getElementById("route-progress-widget");
-                if (!container) return;
-
-                if (!stopsData || !Array.isArray(stopsData.stops) || stopsData.stops.length === 0) {
-                    container.innerHTML = `<div class="widget-subtle">No stop data available.</div>`;
-                    return;
-                }
-
-                const previousStop = stopsData.previousStopName || "—";
-                const currentStop = stopsData.currentStopName || "—";
-                const nextStop = stopsData.nextStopName || "—";
-
-                const stopListHtml = stopsData.stops.map((stop, index) => {
-                    let rowColor = "#243344";
-                    let markerColor = "#d9f7c8";
-                    let badge = "";
-
-                    if (index === stopsData.currentStopIndex) {
-                        rowColor = "#00c2ff";
-                        markerColor = "#00c2ff";
-                        badge = ` <span style="color:#00c2ff;">• current</span>`;
-                    } else if (stopsData.currentStopIndex !== null && index === stopsData.currentStopIndex + 1) {
-                        rowColor = "#77e66a";
-                        markerColor = "#77e66a";
-                        badge = ` <span style="color:#77e66a;">• next</span>`;
-                    }
-
-                    return `
-            <div style="
-                display:flex;
-                align-items:flex-start;
-                gap:10px;
-                padding:7px 0;
-                border-bottom:1px solid rgba(120,170,220,0.08);
-                color:${rowColor};
-            ">
-                <div style="
-                    width:10px;
-                    height:10px;
-                    margin-top:6px;
-                    border-radius:2px;
-                    background:${markerColor};
-                    border:1px solid rgba(255,255,255,0.85);
-                    flex-shrink:0;
-                "></div>
-
-                <div style="line-height:1.45;">
-                    <span style="font-weight:700;">${stop.id}.</span> ${stop.name}${badge}
-                </div>
-            </div>
-        `;
-                }).join("");
-
-                container.innerHTML = `
-        <div class="widget-card" style="margin-bottom:0;">
-            <div class="widget-title">Selected Bus Route Context</div>
-
-            <div class="route-metric-row">
-                <div class="route-metric-label">Previous stop</div>
-                <div class="route-metric-value">${previousStop}</div>
-            </div>
-
-            <div class="route-metric-row">
-                <div class="route-metric-label">Current / nearest</div>
-                <div class="route-metric-value">${currentStop}</div>
-            </div>
-
-            <div class="route-metric-row">
-                <div class="route-metric-label">Next stop</div>
-                <div class="route-metric-value">${nextStop}</div>
-            </div>
-
-            <button id="route-toggle-btn" class="route-toggle-btn">bus stop routes</button>
-
-            <div id="route-stops-panel" class="route-stops-panel">
-                <div class="widget-card" style="max-height:300px; overflow-y:auto; margin-top:12px; margin-bottom:0;">
-                    <div class="widget-title">Stops</div>
-                    ${stopListHtml}
-                </div>
-            </div>
-        </div>
-    `;
-
-                const toggleBtn = document.getElementById("route-toggle-btn");
-                const stopsPanel = document.getElementById("route-stops-panel");
-
-                if (toggleBtn && stopsPanel) {
-                    toggleBtn.addEventListener("click", () => {
-                        stopsPanel.classList.toggle("open");
-                        refreshMapLayout();
-                    });
-                }
-            }
-            window.addEventListener("resize", () => {
-                refreshMapLayout();
+            }).join("");
+
+            const supportCount = latestBuses.filter(isSupportBus).length;
+            const stoppedCount = latestBuses.filter(bus => bus.eventType === "STOP" || bus.doorStatus === "OPEN").length;
+            document.getElementById("fleet-snapshot").innerHTML = `
+                <div class="compact-row"><span>Support buses</span><b>${supportCount}</b></div>
+                <div class="compact-row"><span>At stops</span><b>${stoppedCount}</b></div>
+                <div class="compact-row"><span>Latest update</span><b>${new Date().toLocaleTimeString()}</b></div>
+            `;
+        }
+
+        function rememberBusPoints() {
+            latestBuses.forEach(bus => {
+                lastBusPoints[bus.busId] = {
+                    latitude: num(bus.latitude),
+                    longitude: num(bus.longitude),
+                    routeId: bus.routeId
+                };
             });
+        }
 
-            async function fetchBusStops() {
-                try {
-                    const response = await fetch(`${API_BASE}/api/buses/stops?bus_id=${selectedBusId}`);
-                    const data = await response.json();
+        function renderAll() {
+            syncSelectedBus();
+            updateMarkers();
+            renderRouteControls();
+            renderStaticRouteLayers();
+            renderTrafficSections();
+            updateKpis();
+            updateBusDetail();
+            updateDecisionCenter();
+            updateRecommendations();
+            updateAnalytics();
+        }
 
-                    renderRouteProgressWidget(data);
-                    renderStopsOnMap(data);
-                } catch (error) {
-                    console.error("Stops fetch error:", error);
+        async function fetchBuses() {
+            if (isFetchingBuses) return;
+            isFetchingBuses = true;
 
-                    const container = document.getElementById("route-progress-widget");
-                    if (container) {
-                        container.innerHTML = `<div class="widget-subtle">Failed to load stop data.</div>`;
-                    }
-                }
+            try {
+                const response = await fetch(`${API_BASE}/api/buses/latest`);
+                const data = await response.json();
+                latestBuses = Array.isArray(data) ? data.filter(bus => bus.latitude && bus.longitude) : [];
+                renderAll();
+                rememberBusPoints();
+            } catch (error) {
+                console.error("Error fetching latest bus data:", error);
+            } finally {
+                isFetchingBuses = false;
             }
+        }
 
-            function refreshSelectedBusPanel() {
-                document.getElementById("bus-select").value = selectedBusId;
-                fetchAnalytics();
-                fetchBusStops();
-                updateDecisionCenter();
+        async function fetchOverviewMetrics() {
+            try {
+                const response = await fetch(`${API_BASE}/api/system/overview`);
+                if (!response.ok) return;
+                await response.json();
+            } catch (error) {
+                console.warn("System overview unavailable:", error);
             }
+        }
 
-            document.getElementById("bus-select").addEventListener("change", (e) => {
-                selectedBusId = e.target.value;
+        async function fetchAstanaWeather() {
+            try {
+                const response = await fetch(`${API_BASE}/api/weather/astana`);
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                document.getElementById("weather-widget").textContent =
+                    `Astana ${Math.round(num(data.temperatureC))} C, wind ${Math.round(num(data.windSpeedKmh))} km/h`;
+            } catch (error) {
+                document.getElementById("weather-widget").textContent = "Astana weather unavailable";
+            }
+        }
 
-                trendWidgetCache.speed = `<div style="color:#6b7d90; font-size:13px;">Loading speed trend...</div>`;
-                trendWidgetCache.passengers = `<div style="color:#6b7d90; font-size:13px;">Loading passenger trend...</div>`;
+        document.getElementById("traffic-toggle").addEventListener("click", () => {
+            trafficLayerEnabled = !trafficLayerEnabled;
+            const button = document.getElementById("traffic-toggle");
+            button.textContent = trafficLayerEnabled ? "Traffic layer ON" : "Traffic layer OFF";
+            button.classList.toggle("off", !trafficLayerEnabled);
+            renderTrafficSections();
+        });
 
-                ensurePerformanceTabStructure();
-                document.getElementById("speed-trend-widget").innerHTML = trendWidgetCache.speed;
-                document.getElementById("passenger-trend-widget").innerHTML = trendWidgetCache.passengers;
+        document.getElementById("bus-select").addEventListener("change", event => {
+            selectedBusId = event.target.value;
+            renderAll();
+            const marker = busMarkers[selectedBusId];
+            if (marker) {
+                map.setView(marker.getLatLng(), 14);
+                marker.openPopup();
+            }
+        });
 
-                const marker = markers[selectedBusId];
-                if (marker) {
-                    map.setView(marker.getLatLng(), 14);
-                    marker.openPopup();
-                }
+        setInterval(() => {
+            document.getElementById("current-time").textContent = new Date().toLocaleTimeString();
+        }, 1000);
 
-                refreshSelectedBusPanel();
-                setTimeout(fetchBusTrends, 150);
-            });
-
-            setTrafficLayerVisibility(true);
-            ensurePerformanceTabStructure();
-
+        async function boot() {
+            document.getElementById("current-time").textContent = new Date().toLocaleTimeString();
+            await loadAllRouteAssets();
+            await fetchAstanaWeather();
+            await fetchBuses();
             setInterval(fetchBuses, 2000);
-            setInterval(fetchAnalytics, 5000);
-            setInterval(fetchBusTrends, 5000);
-            setInterval(fetchOverviewMetrics, 3000);
+            setInterval(fetchOverviewMetrics, 5000);
             setInterval(fetchAstanaWeather, 1800000);
+            setTimeout(() => map.invalidateSize(), 100);
+        }
 
-            fetchAstanaWeather();
-            loadSupportRouteShape().then(() => fetchBuses());
-            fetchOverviewMetrics();
-            refreshSelectedBusPanel();
-            setTimeout(fetchBusTrends, 150);
-            setTimeout(refreshMapLayout, 300);
-            setupTabs();
-        </script>
+        boot();
+    </script>
 </body>
 
 </html>
