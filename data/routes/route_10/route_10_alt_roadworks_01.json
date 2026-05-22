@@ -1,0 +1,49 @@
+{
+  "routeId": "Route_10",
+  "alternativeId": "route_10_alt_roadworks_01",
+  "incidentType": "ROADWORKS",
+  "affectedSegment": {
+    "startRouteIndex": 106,
+    "endRouteIndex": 136
+  },
+  "affectedStops": [
+    {
+      "stopSequence": 10,
+      "stopName": "Микрорайон Самал",
+      "demandLevel": "HIGH",
+      "nearestAlternativeDistanceMeters": 198,
+      "replacementQuality": "GOOD"
+    },
+    {
+      "stopSequence": 11,
+      "stopName": "Парк Ататюрк",
+      "demandLevel": "HIGH",
+      "nearestAlternativeDistanceMeters": 171,
+      "replacementQuality": "GOOD"
+    },
+    {
+      "stopSequence": 12,
+      "stopName": "Амман",
+      "demandLevel": "HIGH",
+      "nearestAlternativeDistanceMeters": 111,
+      "replacementQuality": "GOOD"
+    }
+  ],
+  "passengerImpact": "LOW",
+  "maxWalkingDistanceMeters": 198,
+  "reroutingAllowed": true,
+  "validation": {
+    "createdWith": "drawTool.html",
+    "roadFollowing": "Drawn manually along the visible nearby street corridor around the Samal / Ataturk / Amman section.",
+    "similarityCheck": {
+      "route57AverageNearestMeters": 2193,
+      "route10AverageNearestMeters": 191,
+      "route47AverageNearestMeters": 2324,
+      "exactDuplicateRisk": false,
+      "pointsWithin100MetersOfRoute57": "0/7",
+      "pointsWithin100MetersOfRoute10": "1/7",
+      "pointsWithin100MetersOfRoute47": "0/7"
+    }
+  },
+  "notes": "Alternative route keeps all affected high-demand stops within preferred walking distance and is not a duplicate of Route_57, Route_10, or Route_47."
+}
