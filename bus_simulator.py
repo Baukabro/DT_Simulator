@@ -14,6 +14,8 @@ import paho.mqtt.client as mqtt
 BROKER = "127.0.0.1"
 PORT = 1883
 TOPIC = "bus/telemetry"
+CITY_TOPIC = "city/bus/telemetry"
+MQTT_TOPICS = [TOPIC, CITY_TOPIC]
 
 
 # ==================================================
@@ -127,6 +129,7 @@ SUPPORT_NORMAL_MAX_ALIGHTING = 5
 SUPPORT_FOCUS_MAX_ALIGHTING = 8
 SUPPORT_SOFT_COMFORT_LOAD = 45
 SUPPORT_HARD_DISPATCH_LOAD = 58
+SUPPORT_REUSE_MAX_GAP_POINTS = None
 
 # Passenger target ranges are based on your observed events_with_real_gps.csv.
 # They represent desired onboard load for Route_57, not all people at a stop.
@@ -135,6 +138,76 @@ LOAD_TARGET_RANGES = {
     "LOW": (6, 18),
     "MID": (24, 40),
     "HIGH": (45, 66)
+}
+
+
+# ==================================================
+# BUS LIFECYCLE / DISPATCH STATES
+# ==================================================
+STATE_WAITING_TO_START = "WAITING_TO_START"
+STATE_IN_SERVICE = "IN_SERVICE"
+STATE_STOPPING_AT_STOP = "STOPPING_AT_STOP"
+STATE_EN_ROUTE_TO_UNSERVED_QUEUE = "EN_ROUTE_TO_UNSERVED_QUEUE"
+STATE_BOARDING_UNSERVED_QUEUE = "BOARDING_UNSERVED_QUEUE"
+STATE_CONTINUING_ROUTE_AFTER_PICKUP = "CONTINUING_ROUTE_AFTER_PICKUP"
+STATE_COMPLETED_ROUTE = "COMPLETED_ROUTE"
+
+
+# ==================================================
+# ROUTE CONFIGURATION
+# ==================================================
+# Route_57 remains the stable reference route. Future routes should be added
+# here with their own files, headway, critical stops, reserve points, and rules
+# instead of copying the simulator logic.
+ROUTE_CONFIGS = {
+    "Route_57": {
+        "route_id": "Route_57",
+        "route_shape_file": SHAPE_FILE,
+        "route_stops_file": STOPS_FILE,
+        "passenger_profile_file": REAL_EVENTS_FILE,
+        "speed_profile_file": REAL_SPEED_FILE,
+        "capacity": BUS_CAPACITY,
+        "critical_stops": SUPPORT_CRITICAL_STOP_NAMES,
+        "reserve_points": SUPPORT_RESERVE_ANCHOR_STOPS,
+        "terminal_taper_rules": {
+            "final_stop_allows_full_alighting": True,
+            "zero_load_max_alighting": 24
+        },
+        "support_bus_rules": {
+            "enabled": SUPPORT_BUS_ENABLED,
+            "support_route_id": SUPPORT_BUS_ROUTE_ID,
+            "capacity": SUPPORT_BUS_CAPACITY,
+            "trigger_queue": SUPPORT_BUS_TRIGGER_QUEUE,
+            "max_active_support_buses": MAX_ACTIVE_SUPPORT_BUSES,
+            "reuse_max_gap_points": SUPPORT_REUSE_MAX_GAP_POINTS,
+            "residual_boarding_multiplier": SUPPORT_RESIDUAL_BOARDING_MULTIPLIER
+        },
+        "dispatch_schedule": [
+            {
+                "bus_id": "Bus_1",
+                "start_delay_seconds": 0,
+                "start_jitter_seconds": 0,
+                "passenger_scale": 1.0
+            }
+        ],
+        "headway_seconds": 420,
+        "start_jitter_seconds": 45,
+        "scenario_mode": "PEAK_HOUR"
+    }
+}
+
+ACTIVE_ROUTE_ID = "Route_57"
+ACTIVE_ROUTE_CONFIG = ROUTE_CONFIGS[ACTIVE_ROUTE_ID]
+
+
+# ==================================================
+# REROUTING DECISION PREPARATION
+# ==================================================
+REROUTE_RULES = {
+    "upcoming_window_points": 18,
+    "high_traffic_segments_threshold": 5,
+    "average_speed_threshold_mps": 3.2,
+    "alternative_route_exists": False
 }
 
 
@@ -186,6 +259,8 @@ SCENARIO_CONFIG = {
     }
 }
 
+SCENARIO_MODE = str(ACTIVE_ROUTE_CONFIG.get("scenario_mode", SCENARIO_MODE))
+
 
 # ==================================================
 # ONLY ONE MAIN BUS FOR NOW
@@ -209,7 +284,11 @@ BUSES = [
         "lastWaiting": 0,
         "lastLoadLevel": None,
         "targetPassengers": None,
-        "state": "IN_SERVICE",
+        "state": STATE_WAITING_TO_START,
+        "plannedStartDelaySeconds": 0,
+        "startJitterSeconds": 0,
+        "effectiveStartDelaySeconds": 0,
+        "startedAtSimulationSecond": None,
     }
 ]
 
@@ -235,6 +314,14 @@ SUPPORT_RESERVE_POINTS = []
 # ==================================================
 # CSV HELPERS
 # ==================================================
+def get_active_route_file(key: str, fallback: Path) -> Path:
+    return Path(ACTIVE_ROUTE_CONFIG.get(key) or fallback)
+
+
+def get_support_rule(key: str, fallback):
+    return ACTIVE_ROUTE_CONFIG.get("support_bus_rules", {}).get(key, fallback)
+
+
 def read_csv_auto(path: Path) -> pd.DataFrame:
     """Read CSV files exported from Excel/browser with ;, comma, or auto delimiter."""
     if not path.exists():
@@ -268,14 +355,15 @@ def to_number(series: pd.Series) -> pd.Series:
 # ROUTE DATA LOADING
 # ==================================================
 def load_route_shape() -> pd.DataFrame:
-    df = normalize_columns(read_csv_auto(SHAPE_FILE))
+    shape_file = get_active_route_file("route_shape_file", SHAPE_FILE)
+    df = normalize_columns(read_csv_auto(shape_file))
 
     required_columns = {"point_sequence", "latitude", "longitude"}
     missing_columns = required_columns - set(df.columns)
 
     if missing_columns:
         raise ValueError(
-            f"route_57_shape.csv is missing columns: {missing_columns}. "
+            f"{shape_file.name} is missing columns: {missing_columns}. "
             f"Current columns: {df.columns.tolist()}"
         )
 
@@ -287,20 +375,21 @@ def load_route_shape() -> pd.DataFrame:
     df = df.sort_values("point_sequence").reset_index(drop=True)
 
     if len(df) < 2:
-        raise ValueError("route_57_shape.csv must contain at least 2 route points.")
+        raise ValueError(f"{shape_file.name} must contain at least 2 route points.")
 
     return df
 
 
 def load_route_stops() -> pd.DataFrame:
-    df = normalize_columns(read_csv_auto(STOPS_FILE))
+    stops_file = get_active_route_file("route_stops_file", STOPS_FILE)
+    df = normalize_columns(read_csv_auto(stops_file))
 
     required_columns = {"stop_sequence", "stop_name", "latitude", "longitude"}
     missing_columns = required_columns - set(df.columns)
 
     if missing_columns:
         raise ValueError(
-            f"route_57_stops.csv is missing columns: {missing_columns}. "
+            f"{stops_file.name} is missing columns: {missing_columns}. "
             f"Current columns: {df.columns.tolist()}"
         )
 
@@ -317,7 +406,7 @@ def load_route_stops() -> pd.DataFrame:
     df = df.sort_values("stop_sequence").reset_index(drop=True)
 
     if len(df) < 1:
-        raise ValueError("route_57_stops.csv must contain at least 1 stop.")
+        raise ValueError(f"{stops_file.name} must contain at least 1 stop.")
 
     return df
 
@@ -361,18 +450,20 @@ def load_real_speed_profile(target_length: int):
     if target_length <= 0:
         return []
 
-    if not REAL_SPEED_FILE.exists():
-        print("WARNING: gps_clean_full.csv not found. Using fallback speed profile.")
+    speed_file = get_active_route_file("speed_profile_file", REAL_SPEED_FILE)
+
+    if not speed_file.exists():
+        print(f"WARNING: {speed_file.name} not found. Using fallback speed profile.")
         return [FALLBACK_SPEED_MPS] * target_length
 
     try:
-        df = normalize_columns(read_csv_auto(REAL_SPEED_FILE))
+        df = normalize_columns(read_csv_auto(speed_file))
     except Exception as error:
-        print(f"WARNING: failed to read gps_clean_full.csv: {error}. Using fallback speed profile.")
+        print(f"WARNING: failed to read {speed_file.name}: {error}. Using fallback speed profile.")
         return [FALLBACK_SPEED_MPS] * target_length
 
     if "speed" not in df.columns:
-        print("WARNING: speed column not found in gps_clean_full.csv. Using fallback speed profile.")
+        print(f"WARNING: speed column not found in {speed_file.name}. Using fallback speed profile.")
         return [FALLBACK_SPEED_MPS] * target_length
 
     speeds = to_number(df["speed"]).dropna()
@@ -446,14 +537,16 @@ def load_real_passenger_events():
     Expected columns:
     timestamp;event;load;duration;latitude;longitude;speed
     """
-    if not REAL_EVENTS_FILE.exists():
-        print("WARNING: events_with_real_gps.csv not found. Using fallback MID passenger profile.")
+    passenger_file = get_active_route_file("passenger_profile_file", REAL_EVENTS_FILE)
+
+    if not passenger_file.exists():
+        print(f"WARNING: {passenger_file.name} not found. Using fallback MID passenger profile.")
         return None
 
     try:
-        df = normalize_columns(read_csv_auto(REAL_EVENTS_FILE))
+        df = normalize_columns(read_csv_auto(passenger_file))
     except Exception as error:
-        print(f"WARNING: failed to read events_with_real_gps.csv: {error}. Using fallback MID passenger profile.")
+        print(f"WARNING: failed to read {passenger_file.name}: {error}. Using fallback MID passenger profile.")
         return None
 
     required_columns = {"load", "latitude", "longitude"}
@@ -461,7 +554,7 @@ def load_real_passenger_events():
 
     if missing_columns:
         print(
-            "WARNING: events_with_real_gps.csv missing columns:",
+            f"WARNING: {passenger_file.name} missing columns:",
             missing_columns,
             "Using fallback MID passenger profile."
         )
@@ -726,6 +819,95 @@ def initialize_bus_positions(stops):
         )
 
 
+def create_scheduled_main_bus(schedule_item: dict, route_config: dict) -> dict:
+    return {
+        "busId": schedule_item["bus_id"],
+        "routeId": route_config["route_id"],
+        "current_index": 0,
+        "passengerScale": float(schedule_item.get("passenger_scale", 1.0)),
+        "passengerCount": 0,
+        "capacity": int(route_config.get("capacity", BUS_CAPACITY)),
+        "busRole": "MAIN",
+        "active": True,
+        "dwellRemaining": 0,
+        "nextStopIndex": 0,
+        "currentStopName": None,
+        "lastBoarding": 0,
+        "lastAlighting": 0,
+        "lastWaiting": 0,
+        "lastLoadLevel": None,
+        "targetPassengers": None,
+        "state": STATE_WAITING_TO_START,
+        "plannedStartDelaySeconds": 0,
+        "startJitterSeconds": 0,
+        "effectiveStartDelaySeconds": 0,
+        "startedAtSimulationSecond": None,
+    }
+
+
+def apply_dispatch_schedule(route_config: dict, stops):
+    """
+    Applies scheduled starts without changing Route_57 baseline behavior.
+    Bus_1 has zero delay today; future buses can be added to the route config
+    with independent delay/headway/jitter and will not publish until started.
+    """
+    schedule = route_config.get("dispatch_schedule") or []
+    existing_by_id = {bus["busId"]: bus for bus in BUSES}
+    rng = random.Random(20260522 + sum(ord(ch) for ch in route_config["route_id"]))
+
+    for item in schedule:
+        bus_id = item["bus_id"]
+        bus = existing_by_id.get(bus_id)
+
+        if bus is None:
+            bus = create_scheduled_main_bus(item, route_config)
+            BUSES.append(bus)
+            existing_by_id[bus_id] = bus
+
+        planned_delay = int(item.get("start_delay_seconds", 0))
+        jitter_seconds = int(item.get("start_jitter_seconds", route_config.get("start_jitter_seconds", 0)))
+        effective_delay = planned_delay
+
+        if jitter_seconds > 0:
+            effective_delay += rng.randint(0, jitter_seconds)
+
+        bus["routeId"] = route_config["route_id"]
+        bus["capacity"] = int(route_config.get("capacity", BUS_CAPACITY))
+        bus["passengerScale"] = float(item.get("passenger_scale", bus.get("passengerScale", 1.0)))
+        bus["plannedStartDelaySeconds"] = planned_delay
+        bus["startJitterSeconds"] = jitter_seconds
+        bus["effectiveStartDelaySeconds"] = effective_delay
+        bus["startedAtSimulationSecond"] = None
+        bus["state"] = STATE_WAITING_TO_START
+
+        for index, stop in enumerate(stops):
+            if stop["routeIndex"] >= bus["current_index"]:
+                bus["nextStopIndex"] = index
+                break
+        else:
+            bus["nextStopIndex"] = len(stops)
+
+        print(
+            f"DISPATCH PLAN {bus_id}: start_delay={effective_delay}s "
+            f"(base={planned_delay}s, jitter={jitter_seconds}s)"
+        )
+
+
+def activate_bus_if_ready(bus, simulation_second: int) -> bool:
+    if bus.get("state") != STATE_WAITING_TO_START:
+        return True
+
+    start_delay = int(bus.get("effectiveStartDelaySeconds", 0))
+
+    if int(simulation_second) < start_delay:
+        return False
+
+    bus["state"] = STATE_IN_SERVICE
+    bus["startedAtSimulationSecond"] = int(simulation_second)
+    print(f"START {bus['busId']} at simulation_second={simulation_second}")
+    return True
+
+
 # ==================================================
 # PASSENGER / DWELL / SUPPORT BUS LOGIC
 # ==================================================
@@ -767,11 +949,13 @@ def load_observed_stop_dwell_events():
     Reads STOP durations from events_with_real_gps.csv.
     These values come from your own observed ride and are used as realistic dwell references.
     """
-    if not REAL_EVENTS_FILE.exists():
+    passenger_file = get_active_route_file("passenger_profile_file", REAL_EVENTS_FILE)
+
+    if not passenger_file.exists():
         return []
 
     try:
-        df = normalize_columns(read_csv_auto(REAL_EVENTS_FILE))
+        df = normalize_columns(read_csv_auto(passenger_file))
     except Exception as error:
         print(f"WARNING: failed to read dwell events: {error}")
         return []
@@ -858,15 +1042,18 @@ def attach_observed_dwell_to_stops(route_stops):
 
 
 def get_max_alighting_for_stop(stop, load_level: str, current_passengers: int) -> int:
+    taper_rules = ACTIVE_ROUTE_CONFIG.get("terminal_taper_rules", {})
+
     if stop.get("isFinalStop"):
-        return min(current_passengers, MAX_ALIGHTING_FINAL_STOP)
+        if taper_rules.get("final_stop_allows_full_alighting", True):
+            return min(current_passengers, MAX_ALIGHTING_FINAL_STOP)
 
     if is_scenario_focus_stop(stop.get("name", "")):
         return min(current_passengers, MAX_ALIGHTING_FOCUS_STOP)
 
     if normalize_load_level(load_level) == "ZERO":
         # Near the route end, allow more people to leave, but not -50 at a normal stop.
-        return min(current_passengers, 24)
+        return min(current_passengers, int(taper_rules.get("zero_load_max_alighting", 24)))
 
     return min(current_passengers, MAX_ALIGHTING_PER_STOP)
 
@@ -939,10 +1126,11 @@ def store_unserved_queue(stop, queue_count: int):
 
 def is_support_critical_stop(stop) -> bool:
     stop_name = normalize_text_for_matching(stop.get("name", ""))
+    critical_stops = ACTIVE_ROUTE_CONFIG.get("critical_stops", SUPPORT_CRITICAL_STOP_NAMES)
 
     return any(
         normalize_text_for_matching(critical_name) in stop_name
-        for critical_name in SUPPORT_CRITICAL_STOP_NAMES
+        for critical_name in critical_stops
     )
 
 
@@ -975,7 +1163,7 @@ def configure_support_reserve_points(route_stops):
 
     reserve_points = []
 
-    for config in SUPPORT_RESERVE_ANCHOR_STOPS:
+    for config in ACTIVE_ROUTE_CONFIG.get("reserve_points", SUPPORT_RESERVE_ANCHOR_STOPS):
         anchor_stop = find_stop_by_name_contains(
             route_stops,
             config["anchorStopName"]
@@ -1141,7 +1329,7 @@ def find_reusable_support_bus_for_stop(stop):
         if not bus.get("active", True):
             continue
 
-        if bus.get("state") != "CONTINUING_ROUTE_AFTER_PICKUP":
+        if bus.get("state") != STATE_CONTINUING_ROUTE_AFTER_PICKUP:
             continue
 
         current_index = int(bus.get("current_index", 0))
@@ -1149,9 +1337,18 @@ def find_reusable_support_bus_for_stop(stop):
         if current_index > target_route_index:
             continue
 
+        max_gap_points = ACTIVE_ROUTE_CONFIG.get("support_bus_rules", {}).get(
+            "reuse_max_gap_points",
+            SUPPORT_REUSE_MAX_GAP_POINTS
+        )
+
+        if max_gap_points is not None and (target_route_index - current_index) > int(max_gap_points):
+            continue
+
+        trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
         free_space = int(bus.get("capacity", SUPPORT_BUS_CAPACITY)) - int(bus.get("passengerCount", 0))
 
-        if free_space < SUPPORT_BUS_TRIGGER_QUEUE:
+        if free_space < trigger_queue:
             continue
 
         candidates.append((current_index, bus))
@@ -1167,7 +1364,7 @@ def find_reusable_support_bus_for_stop(stop):
 def assign_existing_support_bus_to_stop(support_bus, stop):
     stop_key = get_stop_key(stop)
 
-    support_bus["state"] = "EN_ROUTE_TO_UNSERVED_QUEUE"
+    support_bus["state"] = STATE_EN_ROUTE_TO_UNSERVED_QUEUE
     support_bus["targetStopSequence"] = int(stop["stopSequence"])
     support_bus["targetStopName"] = stop["name"]
     support_bus["targetRouteIndex"] = int(stop["routeIndex"])
@@ -1190,7 +1387,13 @@ def assign_existing_support_bus_to_stop(support_bus, stop):
 def dispatch_support_bus_if_needed(stop, requester_bus=None):
     global SUPPORT_BUS_COUNTER
 
-    if not SUPPORT_BUS_ENABLED:
+    support_enabled = bool(get_support_rule("enabled", SUPPORT_BUS_ENABLED))
+    support_capacity = int(get_support_rule("capacity", SUPPORT_BUS_CAPACITY))
+    support_trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
+    max_active_support = int(get_support_rule("max_active_support_buses", MAX_ACTIVE_SUPPORT_BUSES))
+    support_route_id = str(get_support_rule("support_route_id", SUPPORT_BUS_ROUTE_ID))
+
+    if not support_enabled:
         return None
 
     if not is_support_critical_stop(stop):
@@ -1222,17 +1425,17 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
 
     # Support buses may request the next support only if they themselves create unserved demand.
     # Still capped to avoid infinite spawning.
-    if active_support_count >= MAX_ACTIVE_SUPPORT_BUSES:
+    if active_support_count >= max_active_support:
         print(
             f"SUPPORT DISPATCH SKIPPED at {stop['name']} | "
-            f"active support bus limit reached ({MAX_ACTIVE_SUPPORT_BUSES})"
+            f"active support bus limit reached ({max_active_support})"
         )
         return None
 
     stop_key = get_stop_key(stop)
     queue_count = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
 
-    if queue_count < SUPPORT_BUS_TRIGGER_QUEUE:
+    if queue_count < support_trigger_queue:
         return None
 
     if stop_key in DISPATCHED_SUPPORT_STOPS:
@@ -1251,11 +1454,11 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
 
     support_bus = {
         "busId": support_bus_id,
-        "routeId": SUPPORT_BUS_ROUTE_ID,
+        "routeId": support_route_id,
         "current_index": int(support_start_route_index),
         "passengerScale": 1.0,
         "passengerCount": 0,
-        "capacity": SUPPORT_BUS_CAPACITY,
+        "capacity": support_capacity,
         "busRole": "SUPPORT",
         "active": True,
         "dwellRemaining": 0,
@@ -1266,7 +1469,7 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
         "lastWaiting": 0,
         "lastLoadLevel": "SUPPORT",
         "targetPassengers": queue_count,
-        "state": "EN_ROUTE_TO_UNSERVED_QUEUE",
+        "state": STATE_EN_ROUTE_TO_UNSERVED_QUEUE,
         "targetStopSequence": int(stop["stopSequence"]),
         "targetStopName": stop["name"],
         "targetRouteIndex": int(stop["routeIndex"]),
@@ -1311,7 +1514,7 @@ def start_support_pickup_at_target(bus, stop):
     bus["lastWaiting"] = queue_after
     bus["lastLoadLevel"] = "SUPPORT"
     bus["targetPassengers"] = queue_before
-    bus["state"] = "BOARDING_UNSERVED_QUEUE"
+    bus["state"] = STATE_BOARDING_UNSERVED_QUEUE
     bus["nextStopIndex"] = int(stop.get("stopIndex", 0)) + 1
 
     print(
@@ -1324,7 +1527,7 @@ def start_support_pickup_at_target(bus, stop):
 def is_support_residual_service(bus) -> bool:
     return (
         bus.get("busRole") == "SUPPORT"
-        and bus.get("state") == "CONTINUING_ROUTE_AFTER_PICKUP"
+        and bus.get("state") == STATE_CONTINUING_ROUTE_AFTER_PICKUP
     )
 
 
@@ -1468,6 +1671,7 @@ def start_support_residual_service_dwell(
     bus["lastLoadLevel"] = f"SUPPORT_{load_level}"
     bus["targetPassengers"] = final_passengers
     bus["nextStopIndex"] += 1
+    bus["state"] = STATE_CONTINUING_ROUTE_AFTER_PICKUP
 
     # Escalation to Support_2 only if support bus itself is near/full and cannot serve demand.
     if (
@@ -1565,6 +1769,7 @@ def start_dwell_at_stop(bus, stop, route_row, route_index: int, allow_support_di
     bus["lastLoadLevel"] = load_level
     bus["targetPassengers"] = target_passengers
     bus["nextStopIndex"] += 1
+    bus["state"] = STATE_STOPPING_AT_STOP
 
     if route_queue_left > 0 and allow_support_dispatch:
         store_unserved_queue(stop, route_queue_left)
@@ -1583,8 +1788,10 @@ def start_dwell_at_stop(bus, stop, route_row, route_index: int, allow_support_di
 
 def reset_stop_state_if_needed(bus):
     if bus["dwellRemaining"] == 0:
-        if bus.get("busRole") == "SUPPORT" and bus.get("state") == "BOARDING_UNSERVED_QUEUE":
-            bus["state"] = "CONTINUING_ROUTE_AFTER_PICKUP"
+        if bus.get("busRole") == "SUPPORT" and bus.get("state") == STATE_BOARDING_UNSERVED_QUEUE:
+            bus["state"] = STATE_CONTINUING_ROUTE_AFTER_PICKUP
+        elif bus.get("state") == STATE_STOPPING_AT_STOP:
+            bus["state"] = STATE_IN_SERVICE
 
         bus["currentStopName"] = None
         bus["lastBoarding"] = 0
@@ -1600,6 +1807,7 @@ def handle_support_bus_tick(bus, route_df, route_stops):
 
     if current_index >= len(route_df):
         bus["active"] = False
+        bus["state"] = STATE_COMPLETED_ROUTE
         return None
 
     route_row = route_df.iloc[current_index]
@@ -1612,7 +1820,7 @@ def handle_support_bus_tick(bus, route_df, route_stops):
 
     # Before the target stop, support bus does NOT stop.
     # It goes directly to the unserved queue.
-    if bus.get("state") == "EN_ROUTE_TO_UNSERVED_QUEUE":
+    if bus.get("state") == STATE_EN_ROUTE_TO_UNSERVED_QUEUE:
         target_stop = get_stop_by_sequence(route_stops, int(bus["targetStopSequence"]))
 
         if target_stop is not None and current_index >= int(target_stop["routeIndex"]):
@@ -1622,7 +1830,7 @@ def handle_support_bus_tick(bus, route_df, route_stops):
             reset_stop_state_if_needed(bus)
             return telemetry
 
-        telemetry = build_moving_telemetry(route_row, bus, current_index)
+        telemetry = build_moving_telemetry(route_row, bus, current_index, route_df=route_df)
         bus["current_index"] += 1
         return telemetry
 
@@ -1645,11 +1853,11 @@ def handle_support_bus_tick(bus, route_df, route_stops):
             reset_stop_state_if_needed(bus)
             return telemetry
 
-        telemetry = build_moving_telemetry(route_row, bus, current_index)
+        telemetry = build_moving_telemetry(route_row, bus, current_index, route_df=route_df)
         bus["current_index"] += 1
         return telemetry
 
-    telemetry = build_moving_telemetry(route_row, bus, current_index)
+    telemetry = build_moving_telemetry(route_row, bus, current_index, route_df=route_df)
     bus["current_index"] += 1
 
     return telemetry
@@ -1660,6 +1868,58 @@ def handle_support_bus_tick(bus, route_df, route_stops):
 # ==================================================
 def get_current_timestamp():
     return datetime.now().isoformat(timespec="seconds")
+
+
+def evaluate_reroute_recommendation(
+    route_df,
+    route_index: int,
+    speed: float,
+    traffic_level: str,
+    event_type: str,
+    emergency_event: bool = False
+) -> dict:
+    """
+    Preparation hook for future rerouting.
+
+    The simulator does not invent alternate paths. A reroute can only become
+    actionable after an alternative route geometry is configured for the route.
+    """
+    rules = REROUTE_RULES
+    reasons = []
+
+    if route_df is not None and len(route_df) > 0:
+        start = int(route_index)
+        end = min(len(route_df), start + int(rules["upcoming_window_points"]))
+        upcoming = route_df.iloc[start:end]
+        high_segments = 0
+
+        for _, point in upcoming.iterrows():
+            segment_speed = float(point.get("real_speed", FALLBACK_SPEED_MPS))
+            if speed_to_traffic_level(segment_speed) == "HIGH":
+                high_segments += 1
+
+        if high_segments >= int(rules["high_traffic_segments_threshold"]):
+            reasons.append("CONGESTION_ZONE_AHEAD")
+
+    if float(speed) <= float(rules["average_speed_threshold_mps"]) and traffic_level == "HIGH":
+        reasons.append("LOW_AVERAGE_SPEED")
+
+    if event_type == "TRAFFIC" and traffic_level == "HIGH":
+        reasons.append("DELAY_RISK_HIGH")
+
+    if emergency_event:
+        reasons.append("EMERGENCY_EVENT")
+
+    alternative_exists = bool(rules.get("alternative_route_exists", False))
+    recommended = bool(reasons and alternative_exists)
+
+    return {
+        "recommended": recommended,
+        "status": "READY_FOR_ALTERNATIVE" if recommended else "MONITOR_ONLY",
+        "reasonCodes": reasons,
+        "alternativeRouteId": None,
+        "alternativeRouteExists": alternative_exists
+    }
 
 
 def build_stop_telemetry(route_row, bus, route_index: int):
@@ -1686,7 +1946,7 @@ def build_stop_telemetry(route_row, bus, route_index: int):
         "scenarioMode": SCENARIO_MODE,
         "busRole": bus.get("busRole", "MAIN"),
         "capacity": int(bus.get("capacity", BUS_CAPACITY)),
-        "state": bus.get("state", "IN_SERVICE"),
+        "state": bus.get("state", STATE_IN_SERVICE),
         "originRouteIndex": bus.get("originRouteIndex"),
         "targetRouteIndex": bus.get("targetRouteIndex"),
         "originDescription": bus.get("originDescription"),
@@ -1695,7 +1955,7 @@ def build_stop_telemetry(route_row, bus, route_index: int):
     }
 
 
-def build_moving_telemetry(route_row, bus, route_index: int):
+def build_moving_telemetry(route_row, bus, route_index: int, route_df=None):
     base_speed = float(route_row.get("real_speed", FALLBACK_SPEED_MPS))
     speed = adapt_speed_for_bus(base_speed)
     traffic_level = speed_to_traffic_level(speed)
@@ -1708,6 +1968,14 @@ def build_moving_telemetry(route_row, bus, route_index: int):
         event_type = "IDLE"
     else:
         event_type = "MOVING"
+
+    reroute_recommendation = evaluate_reroute_recommendation(
+        route_df=route_df,
+        route_index=route_index,
+        speed=speed,
+        traffic_level=traffic_level,
+        event_type=event_type
+    )
 
     return {
         "busId": bus["busId"],
@@ -1732,18 +2000,21 @@ def build_moving_telemetry(route_row, bus, route_index: int):
         "scenarioMode": SCENARIO_MODE,
         "busRole": bus.get("busRole", "MAIN"),
         "capacity": int(bus.get("capacity", BUS_CAPACITY)),
-        "state": bus.get("state", "IN_SERVICE"),
+        "state": bus.get("state", STATE_IN_SERVICE),
         "originRouteIndex": bus.get("originRouteIndex"),
         "targetRouteIndex": bus.get("targetRouteIndex"),
         "originDescription": bus.get("originDescription"),
         "originReserveName": bus.get("originReserveName"),
-        "dynamicReserve": bus.get("dynamicReserve")
+        "dynamicReserve": bus.get("dynamicReserve"),
+        "rerouteRecommendation": reroute_recommendation
     }
 
 
 def publish_telemetry(client, telemetry):
     message = json.dumps(telemetry, ensure_ascii=False)
-    client.publish(TOPIC, message)
+
+    for topic in MQTT_TOPICS:
+        client.publish(topic, message)
 
     print(
         f"Sent bus={telemetry['busId']} "
@@ -1762,10 +2033,11 @@ def main():
     global ROUTE_POINT_COUNT
 
     print("Project folder:", BASE_DIR)
-    print("Route shape file:", SHAPE_FILE)
-    print("Stops file:", STOPS_FILE)
-    print("Real speed profile file:", REAL_SPEED_FILE)
-    print("Real passenger events file:", REAL_EVENTS_FILE)
+    print("Active route:", ACTIVE_ROUTE_CONFIG["route_id"])
+    print("Route shape file:", get_active_route_file("route_shape_file", SHAPE_FILE))
+    print("Stops file:", get_active_route_file("route_stops_file", STOPS_FILE))
+    print("Real speed profile file:", get_active_route_file("speed_profile_file", REAL_SPEED_FILE))
+    print("Real passenger events file:", get_active_route_file("passenger_profile_file", REAL_EVENTS_FILE))
 
     route_df = load_route_shape()
     ROUTE_POINT_COUNT = len(route_df)
@@ -1807,12 +2079,14 @@ def main():
     route_stops = attach_observed_dwell_to_stops(route_stops)
     configure_support_reserve_points(route_stops)
     initialize_bus_positions(route_stops)
+    apply_dispatch_schedule(ACTIVE_ROUTE_CONFIG, route_stops)
 
     client = mqtt.Client()
     client.connect(BROKER, PORT, 60)
     client.loop_start()
 
     print("\nNew route-shape simulator started.")
+    print(f"Publishing MQTT topics: {', '.join(MQTT_TOPICS)}")
     print("Bus_1 is the main bus.")
     print("Support buses are dispatched only at critical stops with unserved queue.")
     print(f"Max active support buses: {MAX_ACTIVE_SUPPORT_BUSES}")
@@ -1834,11 +2108,18 @@ def main():
     print(f"Scenario Engine active: {SCENARIO_MODE}\n")
 
     simulation_active = True
+    simulation_second = 0
 
     while simulation_active:
         simulation_active = False
 
         for bus in list(BUSES):
+            if bus.get("state") == STATE_WAITING_TO_START:
+                simulation_active = True
+
+                if not activate_bus_if_ready(bus, simulation_second):
+                    continue
+
             if not bus.get("active", True):
                 continue
 
@@ -1846,6 +2127,7 @@ def main():
 
             if current_index >= len(route_df):
                 bus["active"] = False
+                bus["state"] = STATE_COMPLETED_ROUTE
                 continue
 
             simulation_active = True
@@ -1875,12 +2157,13 @@ def main():
                     reset_stop_state_if_needed(bus)
 
                 else:
-                    telemetry = build_moving_telemetry(route_row, bus, current_index)
+                    telemetry = build_moving_telemetry(route_row, bus, current_index, route_df=route_df)
                     bus["current_index"] += 1
 
             publish_telemetry(client, telemetry)
 
         time.sleep(PUBLISH_INTERVAL_SECONDS)
+        simulation_second += PUBLISH_INTERVAL_SECONDS
 
     print("Simulation finished: all active buses reached the end of the route.")
 
