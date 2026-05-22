@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Route & Stop Builder</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <style>
+        :root {
+            --panel-bg: rgba(255, 255, 255, 0.98);
+            --text-main: #111111;
+            --text-muted: #444444;
+            --blue: #0066ff;
+            --red: #ff3b30;
+            --green-bg: #e7fff0;
+            --green-border: #48c774;
+            --green-text: #087a34;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        #builder-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 2000;
+            width: 300px;
+            max-width: calc(100vw - 20px);
+            height: calc(100vh - 20px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            overscroll-behavior: contain;
+            touch-action: pan-y;
+            background: var(--panel-bg);
+            color: var(--text-main);
+            border-radius: 16px;
+            padding: 14px;
+            box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+        }
+
+        #builder-panel::-webkit-scrollbar {
+            width: 9px;
+        }
+
+        #builder-panel::-webkit-scrollbar-track {
+            background: #eeeeee;
+            border-radius: 999px;
+        }
+
+        #builder-panel::-webkit-scrollbar-thumb {
+            background: #8f8f8f;
+            border-radius: 999px;
+        }
+
+        #builder-panel::-webkit-scrollbar-thumb:hover {
+            background: #666666;
+        }
+
+        .builder-title {
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+
+        .builder-status {
+            font-size: 13px;
+            line-height: 1.55;
+            margin-bottom: 12px;
+            color: #333333;
+        }
+
+        .builder-section-title {
+            font-size: 12px;
+            font-weight: 800;
+            margin-top: 16px;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .builder-btn {
+            width: 100%;
+            padding: 10px 12px;
+            margin-top: 8px;
+            border-radius: 11px;
+            border: 1px solid #bbbbbb;
+            background: #f4f4f4;
+            color: #111111;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .builder-btn:hover {
+            background: #e8e8e8;
+        }
+
+        .builder-btn.active-blue {
+            background: var(--blue);
+            color: #ffffff;
+            border-color: #0053cc;
+        }
+
+        .builder-btn.active-red {
+            background: var(--red);
+            color: #ffffff;
+            border-color: #c92018;
+        }
+
+        .builder-btn.danger {
+            background: #ffe8e8;
+            border-color: #ff7777;
+            color: #b00000;
+        }
+
+        .builder-btn.success {
+            background: var(--green-bg);
+            border-color: var(--green-border);
+            color: var(--green-text);
+        }
+
+        .builder-btn.secondary {
+            background: #f7f7ff;
+            border-color: #9aa7ff;
+            color: #1e36a6;
+        }
+
+        .route-point-label {
+            background: var(--blue);
+            color: #ffffff;
+            border: none;
+            border-radius: 999px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .stop-label {
+            background: var(--red);
+            color: #ffffff;
+            border: none;
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        #hint-box {
+            position: fixed;
+            left: 50%;
+            bottom: 18px;
+            transform: translateX(-50%);
+            z-index: 1500;
+            max-width: calc(100vw - 340px);
+            background: rgba(255, 255, 255, 0.96);
+            color: #111111;
+            padding: 10px 16px;
+            border-radius: 999px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+            font-size: 14px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        @media (max-width: 700px) {
+            #builder-panel {
+                width: 320px;
+                height: 70vh;
+                max-height: 70vh;
+            }
+
+            #hint-box {
+                left: 10px;
+                right: 10px;
+                bottom: 10px;
+                transform: none;
+                max-width: none;
+                border-radius: 14px;
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <div id="builder-panel">
+        <div class="builder-title">Route & Stop Builder</div>
+
+        <div id="builder-status" class="builder-status">
+            Route mode: OFF<br />
+            Stop mode: OFF<br />
+            Route points: 0<br />
+            Stops: 0
+        </div>
+
+        <button id="quick-clear-route" class="builder-btn danger">
+            Clear Route Now
+        </button>
+
+        <div class="builder-section-title">Stops</div>
+
+        <button id="import-stops-csv" class="builder-btn success">
+            Import Stops CSV
+        </button>
+
+        <input
+            id="stops-file-input"
+            type="file"
+            accept=".csv,.txt"
+            style="display: none;"
+        />
+
+        <button id="toggle-stop-mode" class="builder-btn">
+            Add Stops Mode
+        </button>
+
+        <button id="undo-stop" class="builder-btn">
+            Undo Last Stop
+        </button>
+
+        <button id="copy-stops-csv" class="builder-btn success">
+            Copy Stops CSV
+        </button>
+
+        <button id="download-stops-csv" class="builder-btn success">
+            Download Stops CSV
+        </button>
+
+        <button id="reset-default-stops" class="builder-btn secondary">
+            Reset Default Stops
+        </button>
+
+        <button id="clear-stops" class="builder-btn danger">
+            Clear Stops
+        </button>
+
+        <div class="builder-section-title">Route shape</div>
+
+        <button id="import-route-csv" class="builder-btn success">
+            Import Route CSV
+        </button>
+
+        <input
+            id="route-file-input"
+            type="file"
+            accept=".csv,.txt"
+            style="display: none;"
+        />
+
+        <button id="toggle-route-mode" class="builder-btn">
+            Draw Route Mode
+        </button>
+
+        <button id="undo-route-point" class="builder-btn">
+            Undo Route Point
+        </button>
+
+        <button id="copy-route-csv" class="builder-btn success">
+            Copy Route CSV
+        </button>
+
+        <button id="download-route-csv" class="builder-btn success">
+            Download Route CSV
+        </button>
+
+        <button id="clear-route" class="builder-btn danger">
+            Clear Route
+        </button>
+
+        <div class="builder-section-title">Draft</div>
+
+        <button id="fit-to-data" class="builder-btn secondary">
+            Fit Map To Data
+        </button>
+
+        <button id="clear-local-draft" class="builder-btn danger">
+            Clear Local Draft
+        </button>
+    </div>
+
+    <div id="hint-box">
+        Import Stops CSV → Draw Route Mode → click roads and stops in route order
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        const map = L.map("map").setView([51.13, 71.43], 13);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors",
+            maxZoom: 19
+        }).addTo(map);
+
+        const DEFAULT_STOPS = [
+            {
+                stop_sequence: 1,
+                stop_name: "Школа-лицей имени Алтынсарина",
+                latitude: 51.121096,
+                longitude: 71.393381,
+                demand_level: "MEDIUM"
+            },
+            {
+                stop_sequence: 2,
+                stop_name: "ЖК Сыганак",
+                latitude: 51.127972,
+                longitude: 71.395698,
+                demand_level: "HIGH"
+            },
+            {
+                stop_sequence: 3,
+                stop_name: "Республиканский диагностический центр / Медицинский центр Мейрим",
+                latitude: 51.125663,
+                longitude: 71.413091,
+                demand_level: "HIGH"
+            },
+            {
+                stop_sequence: 4,
+                stop_name: "Проспект Кабанбай батыра",
+                latitude: 51.135239,
+                longitude: 71.415075,
+                demand_level: "MEDIUM"
+            },
+            {
+                stop_sequence: 5,
+                stop_name: "Бизнес центр Downtown",
+                latitude: 51.128430,
+                longitude: 71.464015,
+                demand_level: "HIGH"
+            },
+            {
+                stop_sequence: 6,
+                stop_name: "Казахско-турецкий лицей",
+                latitude: 51.127168,
+                longitude: 71.471767,
+                demand_level: "MEDIUM"
+            },
+            {
+                stop_sequence: 7,
+                stop_name: "Улица Рахимжана Кошкарбаева",
+                latitude: 51.126337,
+                longitude: 71.477890,
+                demand_level: "MEDIUM"
+            },
+            {
+                stop_sequence: 8,
+                stop_name: "Улица Сарыкол",
+                latitude: 51.125755,
+                longitude: 71.485467,
+                demand_level: "MEDIUM"
+            },
+            {
+                stop_sequence: 9,
+                stop_name: "ЖК Байтурсын",
+                latitude: 51.119106,
+                longitude: 71.504464,
+                demand_level: "HIGH"
+            },
+            {
+                stop_sequence: 10,
+                stop_name: "ЖК Tasty",
+                latitude: 51.115433,
+                longitude: 71.534561,
+                demand_level: "MEDIUM"
+            }
+        ];
+
+        const ROUTE_STORAGE_KEY = "route_57_shape_draft";
+        const STOPS_STORAGE_KEY = "route_57_stops_draft";
+
+        let routeMode = false;
+        let stopMode = false;
+        let routePoints = [];
+        let stops = [];
+
+        const routeLayer = L.layerGroup().addTo(map);
+        const stopsLayer = L.layerGroup().addTo(map);
+
+        function saveDrafts() {
+            localStorage.setItem(ROUTE_STORAGE_KEY, JSON.stringify(routePoints));
+            localStorage.setItem(STOPS_STORAGE_KEY, JSON.stringify(stops));
+        }
+
+        function loadDrafts() {
+            const savedRoute = localStorage.getItem(ROUTE_STORAGE_KEY);
+            const savedStops = localStorage.getItem(STOPS_STORAGE_KEY);
+
+            if (savedRoute) {
+                try {
+                    routePoints = JSON.parse(savedRoute);
+                } catch (error) {
+                    console.error("Failed to load route draft:", error);
+                    routePoints = [];
+                }
+            }
+
+            if (savedStops) {
+                try {
+                    stops = JSON.parse(savedStops);
+                } catch (error) {
+                    console.error("Failed to load stops draft:", error);
+                    stops = [...DEFAULT_STOPS];
+                }
+            } else {
+                stops = [...DEFAULT_STOPS];
+            }
+        }
+
+        function updateStatus() {
+            const status = document.getElementById("builder-status");
+            const routeBtn = document.getElementById("toggle-route-mode");
+            const stopBtn = document.getElementById("toggle-stop-mode");
+
+            status.innerHTML = `
+                Route mode: ${routeMode ? "ON" : "OFF"}<br />
+                Stop mode: ${stopMode ? "ON" : "OFF"}<br />
+                Route points: ${routePoints.length}<br />
+                Stops: ${stops.length}
+            `;
+
+            routeBtn.textContent = routeMode ? "Stop Drawing Route" : "Draw Route Mode";
+            stopBtn.textContent = stopMode ? "Stop Adding Stops" : "Add Stops Mode";
+
+            routeBtn.classList.toggle("active-blue", routeMode);
+            stopBtn.classList.toggle("active-red", stopMode);
+        }
+
+        function redrawStops() {
+            stopsLayer.clearLayers();
+
+            stops.forEach((stop, index) => {
+                const marker = L.circleMarker([stop.latitude, stop.longitude], {
+                    radius: 8,
+                    color: "#ff3b30",
+                    fillColor: "#ff3b30",
+                    fillOpacity: 0.95,
+                    weight: 2
+                });
+
+                marker.bindTooltip(String(index + 1), {
+                    permanent: true,
+                    direction: "top",
+                    className: "stop-label"
+                });
+
+                marker.bindPopup(`
+                    <div style="font-family: Arial, sans-serif; min-width: 220px;">
+                        <div style="font-size: 16px; font-weight: 800; margin-bottom: 6px;">
+                            ${index + 1}. ${stop.stop_name}
+                        </div>
+                        <div style="font-size: 13px; line-height: 1.5;">
+                            <b>Demand:</b> ${stop.demand_level || "MEDIUM"}<br />
+                            <b>Latitude:</b> ${stop.latitude}<br />
+                            <b>Longitude:</b> ${stop.longitude}<br /><br />
+                            <span style="color: #555;">
+                                In Draw Route Mode, click this stop to add it as a route point.
+                            </span>
+                        </div>
+                    </div>
+                `);
+
+                marker.on("click", function (event) {
+                    if (routeMode) {
+                        L.DomEvent.stopPropagation(event.originalEvent);
+                        addRoutePoint(L.latLng(stop.latitude, stop.longitude));
+                    }
+                });
+
+                marker.addTo(stopsLayer);
+            });
+        }
+
+        function redrawRoute() {
+            routeLayer.clearLayers();
+
+            routePoints.forEach((point, index) => {
+                const marker = L.circleMarker([point.latitude, point.longitude], {
+                    radius: 5,
+                    color: "#0066ff",
+                    fillColor: "#0066ff",
+                    fillOpacity: 0.95,
+                    weight: 2
+                });
+
+                marker.bindTooltip(String(index + 1), {
+                    permanent: true,
+                    direction: "top",
+                    className: "route-point-label"
+                });
+
+                marker.addTo(routeLayer);
+            });
+
+            if (routePoints.length >= 2) {
+                L.polyline(routePoints.map(point => [point.latitude, point.longitude]), {
+                    color: "#0066ff",
+                    weight: 5,
+                    opacity: 0.8,
+                    lineCap: "round",
+                    lineJoin: "round"
+                }).addTo(routeLayer);
+            }
+        }
+
+        function redrawAll() {
+            redrawStops();
+            redrawRoute();
+            updateStatus();
+            saveDrafts();
+        }
+
+        function renumberStops() {
+            stops = stops.map((stop, index) => ({
+                stop_sequence: index + 1,
+                stop_name: stop.stop_name,
+                latitude: Number(stop.latitude),
+                longitude: Number(stop.longitude),
+                demand_level: stop.demand_level || "MEDIUM"
+            }));
+        }
+
+        function renumberRoutePoints() {
+            routePoints = routePoints.map((point, index) => ({
+                point_sequence: index + 1,
+                latitude: Number(point.latitude),
+                longitude: Number(point.longitude)
+            }));
+        }
+
+        function addStop(latlng) {
+            const stopName = prompt("Название остановки:", `Stop ${stops.length + 1}`);
+            if (!stopName) return;
+
+            const demand = prompt("Demand level: LOW / MEDIUM / HIGH", "MEDIUM") || "MEDIUM";
+
+            stops.push({
+                stop_sequence: stops.length + 1,
+                stop_name: stopName.trim(),
+                latitude: Number(latlng.lat.toFixed(6)),
+                longitude: Number(latlng.lng.toFixed(6)),
+                demand_level: demand.trim().toUpperCase()
+            });
+
+            renumberStops();
+            redrawAll();
+        }
+
+        function addRoutePoint(latlng) {
+            routePoints.push({
+                point_sequence: routePoints.length + 1,
+                latitude: Number(latlng.lat.toFixed(6)),
+                longitude: Number(latlng.lng.toFixed(6))
+            });
+
+            renumberRoutePoints();
+            redrawAll();
+        }
+
+        function csvEscape(value) {
+            const text = String(value ?? "");
+
+            if (text.includes(";") || text.includes('"') || text.includes("\n")) {
+                return `"${text.replace(/"/g, '""')}"`;
+            }
+
+            return text;
+        }
+
+        function buildStopsCsv() {
+            return (
+                "stop_sequence;stop_name;latitude;longitude;demand_level\n" +
+                stops
+                    .map(stop => [
+                        stop.stop_sequence,
+                        csvEscape(stop.stop_name),
+                        stop.latitude,
+                        stop.longitude,
+                        stop.demand_level || "MEDIUM"
+                    ].join(";"))
+                    .join("\n")
+            );
+        }
+
+        function buildRouteCsv() {
+            return (
+                "point_sequence;latitude;longitude\n" +
+                routePoints
+                    .map(point => [
+                        point.point_sequence,
+                        point.latitude,
+                        point.longitude
+                    ].join(";"))
+                    .join("\n")
+            );
+        }
+
+        function copyText(text, successMessage) {
+            console.clear();
+            console.log(text);
+
+            navigator.clipboard.writeText(text)
+                .then(() => alert(successMessage))
+                .catch(() => prompt("Copy this:", text));
+        }
+
+        function downloadText(filename, text) {
+            const utf8Bom = "\uFEFF";
+            const blob = new Blob([utf8Bom + text], {
+                type: "text/csv;charset=utf-8;"
+            });
+
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            URL.revokeObjectURL(url);
+        }
+
+        function detectDelimiter(headerLine) {
+            const semicolonCount = (headerLine.match(/;/g) || []).length;
+            const commaCount = (headerLine.match(/,/g) || []).length;
+            const tabCount = (headerLine.match(/\t/g) || []).length;
+
+            if (tabCount >= semicolonCount && tabCount >= commaCount) return "\t";
+            if (semicolonCount >= commaCount) return ";";
+            return ",";
+        }
+
+        function parseDelimitedLine(line, delimiter) {
+            const result = [];
+            let current = "";
+            let insideQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+
+                if (char === '"' && insideQuotes && nextChar === '"') {
+                    current += '"';
+                    i++;
+                    continue;
+                }
+
+                if (char === '"') {
+                    insideQuotes = !insideQuotes;
+                    continue;
+                }
+
+                if (char === delimiter && !insideQuotes) {
+                    result.push(current.trim());
+                    current = "";
+                    continue;
+                }
+
+                current += char;
+            }
+
+            result.push(current.trim());
+            return result;
+        }
+
+        function parseStopsCsv(text) {
+            const cleanText = text.replace(/^\uFEFF/, "").trim();
+            const lines = cleanText
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean);
+
+            if (lines.length < 2) {
+                throw new Error("CSV file is empty or has no data rows.");
+            }
+
+            const delimiter = detectDelimiter(lines[0]);
+            const headers = parseDelimitedLine(lines[0], delimiter)
+                .map(header => header.trim().toLowerCase());
+
+            const requiredHeaders = ["stop_sequence", "stop_name", "latitude", "longitude"];
+            const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
+
+            if (missingHeaders.length > 0) {
+                throw new Error(
+                    "Missing columns: " + missingHeaders.join(", ") +
+                    "\nRequired format: stop_sequence;stop_name;latitude;longitude;demand_level"
+                );
+            }
+
+            const indexOf = name => headers.indexOf(name);
+            const parsedStops = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseDelimitedLine(lines[i], delimiter);
+
+                const sequenceRaw = values[indexOf("stop_sequence")];
+                const nameRaw = values[indexOf("stop_name")];
+                const latRaw = values[indexOf("latitude")];
+                const lonRaw = values[indexOf("longitude")];
+                const demandIndex = indexOf("demand_level");
+                const demandRaw = demandIndex >= 0 ? values[demandIndex] : "MEDIUM";
+
+                const latitude = Number(String(latRaw).replace(",", "."));
+                const longitude = Number(String(lonRaw).replace(",", "."));
+
+                if (!nameRaw || Number.isNaN(latitude) || Number.isNaN(longitude)) {
+                    console.warn("Skipped invalid stop row:", lines[i]);
+                    continue;
+                }
+
+                parsedStops.push({
+                    stop_sequence: Number(sequenceRaw) || parsedStops.length + 1,
+                    stop_name: nameRaw,
+                    latitude,
+                    longitude,
+                    demand_level: (demandRaw || "MEDIUM").trim().toUpperCase()
+                });
+            }
+
+            if (parsedStops.length === 0) {
+                throw new Error("No valid stops found in CSV.");
+            }
+
+            parsedStops.sort((a, b) => a.stop_sequence - b.stop_sequence);
+            return parsedStops;
+        }
+
+        function parseRouteCsv(text) {
+            const cleanText = text.replace(/^\uFEFF/, "").trim();
+            const lines = cleanText
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean);
+
+            if (lines.length < 2) {
+                throw new Error("CSV file is empty or has no data rows.");
+            }
+
+            const delimiter = detectDelimiter(lines[0]);
+            const headers = parseDelimitedLine(lines[0], delimiter)
+                .map(header => header.trim().toLowerCase());
+
+            const requiredHeaders = ["point_sequence", "latitude", "longitude"];
+            const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
+
+            if (missingHeaders.length > 0) {
+                throw new Error(
+                    "Missing columns: " + missingHeaders.join(", ") +
+                    "\nRequired format: point_sequence;latitude;longitude"
+                );
+            }
+
+            const indexOf = name => headers.indexOf(name);
+            const parsedRoute = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseDelimitedLine(lines[i], delimiter);
+
+                const sequenceRaw = values[indexOf("point_sequence")];
+                const latRaw = values[indexOf("latitude")];
+                const lonRaw = values[indexOf("longitude")];
+
+                const latitude = Number(String(latRaw).replace(",", "."));
+                const longitude = Number(String(lonRaw).replace(",", "."));
+
+                if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+                    console.warn("Skipped invalid route row:", lines[i]);
+                    continue;
+                }
+
+                parsedRoute.push({
+                    point_sequence: Number(sequenceRaw) || parsedRoute.length + 1,
+                    latitude,
+                    longitude
+                });
+            }
+
+            if (parsedRoute.length === 0) {
+                throw new Error("No valid route points found in CSV.");
+            }
+
+            parsedRoute.sort((a, b) => a.point_sequence - b.point_sequence);
+            return parsedRoute;
+        }
+
+        function fitMapToData() {
+            const allPoints = [
+                ...stops.map(stop => [stop.latitude, stop.longitude]),
+                ...routePoints.map(point => [point.latitude, point.longitude])
+            ];
+
+            if (allPoints.length === 0) return;
+
+            const bounds = L.latLngBounds(allPoints);
+
+            map.fitBounds(bounds, {
+                padding: [40, 40],
+                maxZoom: 15
+            });
+        }
+
+        function importStopsFromFile(file) {
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+                try {
+                    stops = parseStopsCsv(event.target.result);
+                    renumberStops();
+                    redrawAll();
+                    fitMapToData();
+                    alert(`Loaded ${stops.length} stops from CSV.`);
+                } catch (error) {
+                    console.error(error);
+                    alert("Failed to import stops CSV:\n" + error.message);
+                }
+            };
+
+            reader.readAsText(file, "UTF-8");
+        }
+
+        function importRouteFromFile(file) {
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+                try {
+                    routePoints = parseRouteCsv(event.target.result);
+                    renumberRoutePoints();
+                    redrawAll();
+                    fitMapToData();
+                    alert(`Loaded ${routePoints.length} route points from CSV.`);
+                } catch (error) {
+                    console.error(error);
+                    alert("Failed to import route CSV:\n" + error.message);
+                }
+            };
+
+            reader.readAsText(file, "UTF-8");
+        }
+
+        function clearRoute() {
+            if (!confirm("Удалить весь route shape? Остановки останутся.")) return;
+
+            routePoints = [];
+            redrawAll();
+        }
+
+        function clearStops() {
+            if (!confirm("Удалить все остановки? Маршрут останется.")) return;
+
+            stops = [];
+            redrawAll();
+        }
+
+        function clearLocalDraft() {
+            if (!confirm("Удалить localStorage draft? Текущие данные на карте тоже очистятся.")) return;
+
+            localStorage.removeItem(ROUTE_STORAGE_KEY);
+            localStorage.removeItem(STOPS_STORAGE_KEY);
+
+            routePoints = [];
+            stops = [];
+            redrawAll();
+        }
+
+        document.getElementById("builder-panel").addEventListener("wheel", function (event) {
+            event.stopPropagation();
+        }, { passive: false });
+
+        document.getElementById("builder-panel").addEventListener("touchmove", function (event) {
+            event.stopPropagation();
+        }, { passive: true });
+
+        document.getElementById("quick-clear-route").addEventListener("click", clearRoute);
+        document.getElementById("clear-route").addEventListener("click", clearRoute);
+        document.getElementById("clear-stops").addEventListener("click", clearStops);
+
+        document.getElementById("toggle-stop-mode").addEventListener("click", () => {
+            stopMode = !stopMode;
+            if (stopMode) routeMode = false;
+            updateStatus();
+        });
+
+        document.getElementById("toggle-route-mode").addEventListener("click", () => {
+            routeMode = !routeMode;
+            if (routeMode) stopMode = false;
+            updateStatus();
+        });
+
+        document.getElementById("undo-stop").addEventListener("click", () => {
+            if (stops.length === 0) return;
+            if (!confirm("Удалить последнюю остановку?")) return;
+
+            stops.pop();
+            renumberStops();
+            redrawAll();
+        });
+
+        document.getElementById("undo-route-point").addEventListener("click", () => {
+            if (routePoints.length === 0) return;
+
+            routePoints.pop();
+            renumberRoutePoints();
+            redrawAll();
+        });
+
+        document.getElementById("copy-stops-csv").addEventListener("click", () => {
+            if (stops.length === 0) return alert("Нет остановок.");
+
+            copyText(buildStopsCsv(), "Stops CSV copied. Save it as route_57_stops.csv");
+        });
+
+        document.getElementById("download-stops-csv").addEventListener("click", () => {
+            if (stops.length === 0) return alert("Нет остановок.");
+
+            downloadText("route_57_stops.csv", buildStopsCsv());
+        });
+
+        document.getElementById("copy-route-csv").addEventListener("click", () => {
+            if (routePoints.length === 0) return alert("Нет точек маршрута.");
+
+            copyText(buildRouteCsv(), "Route CSV copied. Save it as route_57_shape.csv");
+        });
+
+        document.getElementById("download-route-csv").addEventListener("click", () => {
+            if (routePoints.length === 0) return alert("Нет точек маршрута.");
+
+            downloadText("route_57_shape.csv", buildRouteCsv());
+        });
+
+        document.getElementById("reset-default-stops").addEventListener("click", () => {
+            if (!confirm("Вернуть дефолтные 10 остановок? Текущий список заменится.")) return;
+
+            stops = [...DEFAULT_STOPS];
+            renumberStops();
+            redrawAll();
+            fitMapToData();
+        });
+
+        document.getElementById("import-stops-csv").addEventListener("click", () => {
+            document.getElementById("stops-file-input").click();
+        });
+
+        document.getElementById("stops-file-input").addEventListener("change", event => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            importStopsFromFile(file);
+            event.target.value = "";
+        });
+
+        document.getElementById("import-route-csv").addEventListener("click", () => {
+            document.getElementById("route-file-input").click();
+        });
+
+        document.getElementById("route-file-input").addEventListener("change", event => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            importRouteFromFile(file);
+            event.target.value = "";
+        });
+
+        document.getElementById("fit-to-data").addEventListener("click", fitMapToData);
+        document.getElementById("clear-local-draft").addEventListener("click", clearLocalDraft);
+
+        map.on("click", function (event) {
+            if (stopMode) {
+                addStop(event.latlng);
+                return;
+            }
+
+            if (routeMode) {
+                addRoutePoint(event.latlng);
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "z" || event.key === "Z") {
+                if (routeMode && routePoints.length > 0) {
+                    routePoints.pop();
+                    renumberRoutePoints();
+                    redrawAll();
+                }
+            }
+
+            if (event.key === "r" || event.key === "R") {
+                routeMode = !routeMode;
+                if (routeMode) stopMode = false;
+                updateStatus();
+            }
+
+            if (event.key === "s" || event.key === "S") {
+                stopMode = !stopMode;
+                if (stopMode) routeMode = false;
+                updateStatus();
+            }
+        });
+
+        loadDrafts();
+        redrawAll();
+        fitMapToData();
+    </script>
+</body>
+</html>
