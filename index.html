@@ -43,7 +43,7 @@
         }
 
         body {
-            overflow: hidden;
+            overflow: auto;
         }
 
         button,
@@ -52,9 +52,9 @@
         }
 
         .app {
-            height: 100vh;
+            min-height: 100vh;
             display: grid;
-            grid-template-rows: 64px 88px 1fr 112px;
+            grid-template-rows: 64px 82px minmax(560px, 1fr) auto;
             gap: 14px;
             padding: 14px;
         }
@@ -162,7 +162,7 @@
 
         .kpi-strip {
             display: grid;
-            grid-template-columns: repeat(5, minmax(120px, 1fr));
+            grid-template-columns: repeat(4, minmax(140px, 1fr));
             gap: 12px;
         }
 
@@ -268,6 +268,11 @@
         .route-status.danger {
             background: #ffeded;
             color: var(--red);
+        }
+
+        .route-status.reroute {
+            background: #e7fbf6;
+            color: #078a78;
         }
 
         .route-stats {
@@ -377,6 +382,53 @@
             color: var(--text);
             font-weight: 700;
             margin-bottom: 12px;
+        }
+
+        .operator-block {
+            margin-bottom: 12px;
+        }
+
+        .operator-label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .system-alerts {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-soft);
+            padding: 10px;
+            margin-bottom: 12px;
+        }
+
+        .alert-card {
+            border: 1px solid #e4edf1;
+            border-left: 4px solid var(--amber);
+            border-radius: 10px;
+            background: #fff;
+            padding: 9px 10px;
+            margin-top: 8px;
+        }
+
+        .alert-card.high {
+            border-left-color: var(--red);
+        }
+
+        .alert-title {
+            font-weight: 800;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+
+        .alert-meta {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
         }
 
         .info-grid {
@@ -489,6 +541,26 @@
             background: #fff;
             border: 1px solid #e4edf1;
             padding: 8px 9px;
+        }
+
+        .issue-item small {
+            display: inline-block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .incident-marker {
+            display: grid;
+            place-items: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #fff4e1;
+            border: 2px solid #e15a24;
+            box-shadow: 0 8px 18px rgba(79, 43, 22, 0.18);
+            font-size: 16px;
         }
 
         .bar-row {
@@ -623,13 +695,6 @@
             </div>
             <div class="kpi-card">
                 <div>
-                    <div id="kpi-avg-speed" class="kpi-value">0</div>
-                    <div class="kpi-label">Average speed km/h</div>
-                </div>
-                <div class="kpi-accent">V</div>
-            </div>
-            <div class="kpi-card">
-                <div>
                     <div id="kpi-alerts" class="kpi-value">0</div>
                     <div class="kpi-label">Active alerts</div>
                 </div>
@@ -638,7 +703,7 @@
             <div class="kpi-card">
                 <div>
                     <div id="kpi-passengers" class="kpi-value">0</div>
-                    <div class="kpi-label">Visible passengers</div>
+                    <div class="kpi-label">Current onboard passengers</div>
                 </div>
                 <div class="kpi-accent">P</div>
             </div>
@@ -658,9 +723,24 @@
 
             <aside class="panel">
                 <h2 class="panel-title">Live Telemetry / Operator Panel</h2>
-                <select id="bus-select" class="operator-select">
-                    <option value="Bus_1">Bus_1</option>
-                </select>
+                <div class="operator-block">
+                    <label class="operator-label" for="scenario-select">Route_57 scenario</label>
+                    <select id="scenario-select" class="operator-select">
+                        <option value="NONE">No scenario</option>
+                        <option value="R57_ROADWORKS_SARAISHYK" selected>Route_57: ROADWORKS</option>
+                        <option value="R57_TRAFFIC_JAM_SARAISHYK">Route_57: TRAFFIC_JAM</option>
+                        <option value="R57_SECURITY_CLOSURE_MINISTRY">Route_57: SECURITY_CLOSURE</option>
+                    </select>
+                </div>
+
+                <div id="system-alerts" class="system-alerts"></div>
+
+                <div class="operator-block">
+                    <label class="operator-label" for="bus-select">Selected vehicle</label>
+                    <select id="bus-select" class="operator-select">
+                        <option value="Bus_1">Bus_1</option>
+                    </select>
+                </div>
 
                 <div id="bus-detail" class="info-grid"></div>
 
@@ -674,8 +754,8 @@
                 <div id="active-recommendations" class="issue-list"></div>
             </div>
             <div>
-                <h3>Traffic Mix</h3>
-                <div id="traffic-bars"></div>
+                <h3>Passenger Flow</h3>
+                <div id="passenger-flow"></div>
             </div>
             <div>
                 <h3>Fleet Snapshot</h3>
@@ -690,6 +770,37 @@
         const API_BASE = "http://127.0.0.1:8000";
         const BUS_CAPACITY = 60;
 
+        const SCENARIOS = {
+            NONE: null,
+            R57_ROADWORKS_SARAISHYK: {
+                scenarioId: "R57_ROADWORKS_SARAISHYK",
+                routeId: "Route_57",
+                incidentType: "ROADWORKS",
+                title: "Roadworks near Saraishyk / Akmeshit corridor",
+                description: "Lane maintenance and severe local disruption near Saraishyk, Akmeshit and Ministry district.",
+                severity: "HIGH",
+                expectedDelayMinutes: 8
+            },
+            R57_TRAFFIC_JAM_SARAISHYK: {
+                scenarioId: "R57_TRAFFIC_JAM_SARAISHYK",
+                routeId: "Route_57",
+                incidentType: "TRAFFIC_JAM",
+                title: "Severe congestion near Saraishyk / Akmeshit",
+                description: "Traffic jam causing major delay on the normal Route_57 corridor.",
+                severity: "HIGH",
+                expectedDelayMinutes: 7
+            },
+            R57_SECURITY_CLOSURE_MINISTRY: {
+                scenarioId: "R57_SECURITY_CLOSURE_MINISTRY",
+                routeId: "Route_57",
+                incidentType: "SECURITY_CLOSURE",
+                title: "Security closure near Ministry district",
+                description: "Temporary road restriction near government area.",
+                severity: "HIGH",
+                expectedDelayMinutes: 10
+            }
+        };
+
         const ROUTES = {
             Route_57: {
                 id: "Route_57",
@@ -697,6 +808,9 @@
                 color: "#2367e8",
                 shapeFile: "data/routes/route_57/route_57_shape.csv",
                 stopsFile: "data/routes/route_57/route_57_stops.csv",
+                altShapeFile: "data/routes/route_57/route_57_shape_alt.csv",
+                altStopsFile: "data/routes/route_57/route_57_stops_alt.csv",
+                headwaySeconds: 420,
                 showFullRoute: false,
                 showStops: true
             },
@@ -706,6 +820,7 @@
                 color: "#0f9faf",
                 shapeFile: "data/routes/route_10/route_10_shape.csv",
                 stopsFile: "data/routes/route_10/route_10_stops.csv",
+                headwaySeconds: 480,
                 showFullRoute: false,
                 showStops: true
             },
@@ -715,6 +830,7 @@
                 color: "#7a55d8",
                 shapeFile: "data/routes/route_47/route_47_shape.csv",
                 stopsFile: "data/routes/route_47/route_47_stops.csv",
+                headwaySeconds: 540,
                 showFullRoute: false,
                 showStops: true
             }
@@ -739,6 +855,7 @@
         const fullRouteLayers = {};
         const stopLayers = {};
         const trafficSectionLayers = {};
+        const scenarioLayer = L.layerGroup().addTo(map);
         const busMarkers = {};
         const lastBusPoints = {};
 
@@ -746,6 +863,7 @@
         let selectedBusId = "Bus_1";
         let trafficLayerEnabled = true;
         let isFetchingBuses = false;
+        let selectedScenarioId = localStorage.getItem("dtScenarioId") || "R57_ROADWORKS_SARAISHYK";
 
         function escapeHtml(value) {
             return String(value ?? "")
@@ -847,8 +965,12 @@
             const data = {
                 shape: [],
                 stops: [],
+                altShape: [],
+                altStops: [],
                 hasShape: false,
-                hasStops: false
+                hasStops: false,
+                hasAltShape: false,
+                hasAltStops: false
             };
 
             try {
@@ -881,6 +1003,42 @@
                 data.hasStops = data.stops.length > 0;
             } catch (error) {
                 console.warn(`${route.id} stops not loaded:`, error);
+            }
+
+            if (route.altShapeFile) {
+                try {
+                    const rows = await fetchCsv(route.altShapeFile);
+                    data.altShape = rows
+                        .map(row => ({
+                            sequence: num(pick(row, ["point_sequence", "sequence", "id"])),
+                            latitude: num(pick(row, ["latitude", "lat"])),
+                            longitude: num(pick(row, ["longitude", "lon", "lng"]))
+                        }))
+                        .filter(point => point.latitude && point.longitude)
+                        .sort((a, b) => a.sequence - b.sequence);
+                    data.hasAltShape = data.altShape.length > 1;
+                } catch (error) {
+                    console.warn(`${route.id} alternative shape not loaded:`, error);
+                }
+            }
+
+            if (route.altStopsFile) {
+                try {
+                    const rows = await fetchCsv(route.altStopsFile);
+                    data.altStops = rows
+                        .map(row => ({
+                            sequence: num(pick(row, ["stop_sequence", "sequence", "id"])),
+                            name: pick(row, ["stop_name", "name", "stop"]) || "Alternative stop",
+                            latitude: num(pick(row, ["latitude", "lat"])),
+                            longitude: num(pick(row, ["longitude", "lon", "lng"])),
+                            demandLevel: String(pick(row, ["demand_level", "demand"]) || "MEDIUM").toUpperCase()
+                        }))
+                        .filter(stop => stop.latitude && stop.longitude)
+                        .sort((a, b) => a.sequence - b.sequence);
+                    data.hasAltStops = data.altStops.length > 0;
+                } catch (error) {
+                    console.warn(`${route.id} alternative stops not loaded:`, error);
+                }
             }
 
             routeData[route.id] = data;
@@ -1014,6 +1172,7 @@
 
             latestBuses.forEach(bus => {
                 const routeId = normalizeRouteId(bus.routeId);
+                if (bus.reroutingActive && routeId === "Route_57") return;
                 const shape = routeData[routeId]?.shape || [];
                 if (shape.length < 2) return;
 
@@ -1056,12 +1215,104 @@
                 : "Bus markers and stops visible";
         }
 
+        function incidentIcon(type) {
+            const icons = {
+                ROADWORKS: "🚧",
+                TRAFFIC_JAM: "🚦",
+                SECURITY_CLOSURE: "⛔",
+                ACCIDENT: "⚠️",
+                BLOCKAGE: "⛔"
+            };
+            return icons[String(type || "").toUpperCase()] || "⚠️";
+        }
+
+        function isScenarioVisible(bus) {
+            const decision = String(bus?.reroutingDecision || bus?.reroutingRecommendation?.decisionType || "NORMAL");
+            return selectedScenarioId !== "NONE" && Boolean(bus?.scenarioId) && !["NORMAL", "MONITOR"].includes(decision);
+        }
+
+        function activeScenarioBus() {
+            if (selectedScenarioId === "NONE") return null;
+            return latestBuses.find(item =>
+                item.scenarioId
+                && normalizeRouteId(item.routeId) === "Route_57"
+                && (selectedScenarioId === item.scenarioId || SCENARIOS[selectedScenarioId])
+            ) || null;
+        }
+
+        function displayScenarioForBus(bus) {
+            const selected = SCENARIOS[selectedScenarioId];
+            if (selected) return selected;
+            if (!bus?.scenarioId) return null;
+            return {
+                scenarioId: bus.scenarioId,
+                routeId: normalizeRouteId(bus.routeId),
+                incidentType: bus.incidentType,
+                title: bus.incidentTitle,
+                description: bus.incidentDescription,
+                severity: "HIGH",
+                expectedDelayMinutes: num(bus.expectedDelayMinutes)
+            };
+        }
+
+        function renderScenarioLayers() {
+            scenarioLayer.clearLayers();
+
+            const bus = activeScenarioBus();
+            if (!bus || !isScenarioVisible(bus)) return;
+
+            const scenario = displayScenarioForBus(bus);
+            const data = routeData.Route_57 || {};
+            const shape = data.shape || [];
+            const start = Math.max(0, Math.floor(num(bus.affectedSegmentStartIndex, -1)));
+            const end = Math.min(shape.length - 1, Math.floor(num(bus.affectedSegmentEndIndex, -1)));
+
+            if (shape.length > 1 && start >= 0 && end > start) {
+                const section = shape.slice(start, end + 1).map(point => [point.latitude, point.longitude]);
+                L.polyline(section, {
+                    color: "#e15a24",
+                    weight: 9,
+                    opacity: 0.88,
+                    lineCap: "round",
+                    lineJoin: "round"
+                }).addTo(scenarioLayer);
+
+                const midPoint = shape[Math.floor((start + end) / 2)];
+                L.marker([midPoint.latitude, midPoint.longitude], {
+                    icon: L.divIcon({
+                        className: "",
+                        html: `<div class="incident-marker">${incidentIcon(scenario?.incidentType || bus.incidentType)}</div>`,
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 14]
+                    })
+                }).bindPopup(`
+                    <div>
+                        <div class="popup-title">${escapeHtml(scenario?.title || bus.incidentTitle || "Route incident")}</div>
+                        <div class="popup-row"><span>Route</span><b>Route_57</b></div>
+                        <div class="popup-row"><span>Severity</span><b>${escapeHtml(scenario?.severity || "HIGH")}</b></div>
+                    </div>
+                `).addTo(scenarioLayer);
+            }
+
+            const decision = String(bus.reroutingDecision || "");
+            if (["REROUTE_RECOMMENDED", "REROUTING_ACTIVE"].includes(decision) && data.altShape?.length > 1) {
+                L.polyline(data.altShape.map(point => [point.latitude, point.longitude]), {
+                    color: "#009f88",
+                    weight: 6,
+                    opacity: 0.86,
+                    dashArray: decision === "REROUTE_RECOMMENDED" ? "10 8" : null,
+                    lineCap: "round",
+                    lineJoin: "round"
+                }).addTo(scenarioLayer);
+            }
+        }
+
         function renderRouteControls() {
             const container = document.getElementById("route-status-list");
             const byRoute = aggregateRoutes();
 
             container.innerHTML = Object.values(ROUTES).map(route => {
-                const stats = byRoute[route.id] || { buses: [], avgLoad: 0, status: "Standby", statusClass: "" };
+                const stats = byRoute[route.id] || { buses: [], avgLoad: 0, status: "Standby", statusClass: "", interval: "Standby" };
                 const data = routeData[route.id] || {};
                 const traffic = stats.status;
                 return `
@@ -1076,8 +1327,8 @@
                         <div class="route-stats">
                             <div class="mini-stat"><span>Buses</span><b>${stats.buses.length}</b></div>
                             <div class="mini-stat"><span>Avg load</span><b>${stats.avgLoad}%</b></div>
+                            <div class="mini-stat"><span>Interval</span><b>${escapeHtml(stats.interval)}</b></div>
                             <div class="mini-stat"><span>Stops</span><b>${data.stops?.length || 0}</b></div>
-                            <div class="mini-stat"><span>Shape</span><b>${data.shape?.length ? "OK" : "Missing"}</b></div>
                         </div>
                         <div class="route-actions">
                             <button class="small-btn ${route.showFullRoute ? "active" : ""}" data-action="route" data-route="${route.id}">
@@ -1107,7 +1358,7 @@
         function aggregateRoutes() {
             const result = {};
             Object.keys(ROUTES).forEach(routeId => {
-                result[routeId] = { buses: [], avgLoad: 0, status: "Standby", statusClass: "" };
+                result[routeId] = { buses: [], avgLoad: 0, status: "Standby", statusClass: "", interval: "Standby" };
             });
 
             latestBuses.forEach(bus => {
@@ -1116,7 +1367,7 @@
                 result[routeId].buses.push(bus);
             });
 
-            Object.entries(result).forEach(([, stats]) => {
+            Object.entries(result).forEach(([routeId, stats]) => {
                 if (!stats.buses.length) return;
 
                 const avgPassengers = stats.buses.reduce((sum, bus) => sum + num(bus.passengerCount), 0) / stats.buses.length;
@@ -1124,7 +1375,18 @@
 
                 const hasHighTraffic = stats.buses.some(bus => bus.trafficLevel === "HIGH");
                 const hasQueue = stats.buses.some(bus => num(bus.waitingPassengers) > 0);
-                if (hasQueue) {
+                const hasSupport = stats.buses.some(isSupportBus);
+                const hasRerouting = stats.buses.some(bus => bus.reroutingActive || bus.reroutingDecision === "REROUTING_ACTIVE");
+                const headway = ROUTES[routeId]?.headwaySeconds || 420;
+                stats.interval = stats.buses.length > 1 ? "active multi-bus" : `${Math.round(headway / 60)} min est.`;
+
+                if (hasRerouting) {
+                    stats.status = "Rerouting";
+                    stats.statusClass = "reroute";
+                } else if (hasSupport) {
+                    stats.status = "Support operating";
+                    stats.statusClass = "warn";
+                } else if (hasQueue) {
                     stats.status = "Queue";
                     stats.statusClass = "danger";
                 } else if (hasHighTraffic) {
@@ -1204,19 +1466,11 @@
 
         function updateKpis() {
             const baseRoutes = new Set(latestBuses.map(bus => normalizeRouteId(bus.routeId)).filter(Boolean));
-            const avgSpeed = latestBuses.length
-                ? latestBuses.reduce((sum, bus) => sum + speedKmh(bus), 0) / latestBuses.length
-                : 0;
             const passengers = latestBuses.reduce((sum, bus) => sum + num(bus.passengerCount), 0);
-            const alerts = latestBuses.filter(bus =>
-                bus.trafficLevel === "HIGH" ||
-                num(bus.waitingPassengers) > 0 ||
-                num(bus.passengerCount) >= BUS_CAPACITY
-            ).length;
+            const alerts = buildOperationalAlerts().length;
 
             document.getElementById("kpi-active-buses").textContent = latestBuses.length;
             document.getElementById("kpi-active-routes").textContent = baseRoutes.size;
-            document.getElementById("kpi-avg-speed").textContent = avgSpeed.toFixed(1);
             document.getElementById("kpi-alerts").textContent = alerts;
             document.getElementById("kpi-passengers").textContent = passengers;
         }
@@ -1270,7 +1524,35 @@
                     rows: [
                         ["Status", bus.eventType === "STOP" ? "boarding / dwell" : "continuing service"],
                         ["Capacity", `${num(bus.passengerCount)}/${BUS_CAPACITY}`],
-                        ["Unserved queue", num(bus.waitingPassengers)]
+                        ["Target", bus.supportTargetStopName || bus.targetStopName || "route queue"],
+                        ["Origin", bus.supportOriginDescription || bus.originDescription || "route standby"]
+                    ]
+                };
+            }
+
+            const reroutingDecision = String(bus.reroutingDecision || bus.reroutingRecommendation?.decisionType || "NORMAL");
+            if (selectedScenarioId !== "NONE" && bus.scenarioId && reroutingDecision !== "NORMAL") {
+                const scenario = displayScenarioForBus(bus);
+                const active = reroutingDecision === "REROUTING_ACTIVE";
+                const recommended = reroutingDecision === "REROUTE_RECOMMENDED";
+                const title = active
+                    ? "Rerouting active"
+                    : recommended
+                        ? "Reroute recommended"
+                        : reroutingDecision === "HOLD_ROUTE"
+                            ? "Hold normal route"
+                            : "Monitor incident";
+                return {
+                    title,
+                    pill: active ? "ACTIVE" : recommended ? "ACTION" : "WATCH",
+                    className: active || recommended ? "support" : "warn",
+                    rows: [
+                        ["Incident", `${incidentIcon(scenario?.incidentType || bus.incidentType)} ${scenario?.title || bus.incidentTitle || "Route incident"}`],
+                        ["Route", `${normalizeRouteId(bus.routeId)} · ${scenario?.incidentType || bus.incidentType || "INCIDENT"}`],
+                        ["Expected delay", `${num(scenario?.expectedDelayMinutes || bus.expectedDelayMinutes)} min`],
+                        ["Passenger impact", bus.passengerImpact || "-"],
+                        ["Max walk", bus.maxWalkingDistanceMeters ? `${Math.round(num(bus.maxWalkingDistanceMeters))} m` : "-"],
+                        ["Action", active ? "Bus is following alternative corridor" : (bus.reroutingRecommendation?.action || "Use alternative route")]
                     ]
                 };
             }
@@ -1278,7 +1560,7 @@
             const queue = num(bus.waitingPassengers);
             const full = num(bus.passengerCount) >= BUS_CAPACITY;
 
-            if (queue > 0 && full) {
+            if (bus.supportDecision === "DISPATCH_SUPPORT_BUS" || (queue > 0 && full)) {
                 return {
                     title: "Dispatch support bus",
                     pill: "ACTION",
@@ -1291,7 +1573,7 @@
                 };
             }
 
-            if (queue > 0) {
+            if (bus.supportDecision === "MONITOR_QUEUE" || queue > 0) {
                 return {
                     title: "Monitor queue",
                     pill: "WATCH",
@@ -1331,6 +1613,73 @@
             `;
         }
 
+        function buildOperationalAlerts() {
+            const alerts = [];
+            const scenarioBus = activeScenarioBus();
+
+            if (scenarioBus && isScenarioVisible(scenarioBus)) {
+                const scenario = displayScenarioForBus(scenarioBus);
+                const decision = String(scenarioBus.reroutingDecision || "MONITOR");
+                alerts.push({
+                    level: "high",
+                    title: `${incidentIcon(scenario?.incidentType)} ${scenario?.title || scenarioBus.incidentTitle}`,
+                    meta: `Route_57 · ${scenario?.severity || "HIGH"} impact · Expected delay ${num(scenario?.expectedDelayMinutes || scenarioBus.expectedDelayMinutes)} min`,
+                    action: decision === "REROUTING_ACTIVE" ? "Reroute active" : scenarioBus.reroutingRecommendation?.action || "Monitor"
+                });
+            }
+
+            latestBuses.forEach(bus => {
+                if (bus.supportDecision === "DISPATCH_SUPPORT_BUS") {
+                    alerts.push({
+                        level: "high",
+                        title: "Support bus recommendation",
+                        meta: `${normalizeRouteId(bus.routeId)} · Unserved queue ${num(bus.waitingPassengers)} at ${bus.currentStopName || "current stop"}`,
+                        action: "Dispatch support bus"
+                    });
+                } else if (isSupportBus(bus)) {
+                    alerts.push({
+                        level: "info",
+                        title: "Support operating",
+                        meta: `${normalizeRouteId(bus.routeId)} · Queue mitigation in progress`,
+                        action: bus.eventType === "STOP" ? "Boarding passengers" : "Moving to service point"
+                    });
+                } else if (num(bus.waitingPassengers) > 0) {
+                    alerts.push({
+                        level: "info",
+                        title: "Monitor queue",
+                        meta: `${normalizeRouteId(bus.routeId)} · ${num(bus.waitingPassengers)} unserved passengers`,
+                        action: "Monitor"
+                    });
+                }
+            });
+
+            return alerts.slice(0, 5);
+        }
+
+        function updateSystemAlerts() {
+            const container = document.getElementById("system-alerts");
+            const alerts = buildOperationalAlerts();
+
+            if (!alerts.length) {
+                container.innerHTML = `
+                    <div class="panel-title" style="margin-bottom:4px">System Alerts</div>
+                    <div class="alert-meta">No active incident or support intervention.</div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="panel-title" style="margin-bottom:4px">System Alerts</div>
+                ${alerts.map(alert => `
+                    <div class="alert-card ${alert.level === "high" ? "high" : ""}">
+                        <div class="alert-title">${escapeHtml(alert.title)}</div>
+                        <div class="alert-meta">${escapeHtml(alert.meta)}</div>
+                        <div class="alert-meta"><b>Action:</b> ${escapeHtml(alert.action)}</div>
+                    </div>
+                `).join("")}
+            `;
+        }
+
         function updateRecommendations() {
             const active = latestBuses
                 .map(bus => ({ bus, decision: getDecision(bus) }))
@@ -1344,31 +1693,13 @@
 
             container.innerHTML = active.slice(0, 5).map(item => `
                 <div class="issue-item">
-                    <span>${escapeHtml(item.bus.busId)} / ${escapeHtml(normalizeRouteId(item.bus.routeId))}</span>
+                    <span>${escapeHtml(item.bus.busId)} / ${escapeHtml(normalizeRouteId(item.bus.routeId))}<br><small>${escapeHtml(item.decision.rows?.[0]?.[1] || "")}</small></span>
                     <b>${escapeHtml(item.decision.title)}</b>
                 </div>
             `).join("");
         }
 
         function updateAnalytics() {
-            const counts = { LOW: 0, MEDIUM: 0, HIGH: 0 };
-            latestBuses.forEach(bus => {
-                const level = String(bus.trafficLevel || "").toUpperCase();
-                if (counts[level] !== undefined) counts[level] += 1;
-            });
-
-            const total = Math.max(latestBuses.length, 1);
-            document.getElementById("traffic-bars").innerHTML = ["LOW", "MEDIUM", "HIGH"].map(level => {
-                const percent = Math.round((counts[level] / total) * 100);
-                return `
-                    <div class="bar-row">
-                        <span>${level}</span>
-                        <div class="bar-track"><div class="bar-fill" style="width:${percent}%; background:${getTrafficColor(level)}"></div></div>
-                        <b>${percent}%</b>
-                    </div>
-                `;
-            }).join("");
-
             const supportCount = latestBuses.filter(isSupportBus).length;
             const stoppedCount = latestBuses.filter(bus => bus.eventType === "STOP" || bus.doorStatus === "OPEN").length;
             document.getElementById("fleet-snapshot").innerHTML = `
@@ -1376,6 +1707,19 @@
                 <div class="compact-row"><span>At stops</span><b>${stoppedCount}</b></div>
                 <div class="compact-row"><span>Latest update</span><b>${new Date().toLocaleTimeString()}</b></div>
             `;
+
+            const byRoute = aggregateRoutes();
+            document.getElementById("passenger-flow").innerHTML = Object.entries(byRoute).map(([routeId, stats]) => {
+                const onboard = stats.buses.reduce((sum, bus) => sum + num(bus.passengerCount), 0);
+                const percent = Math.min(100, Math.round((onboard / Math.max(1, stats.buses.length * BUS_CAPACITY)) * 100));
+                return `
+                    <div class="bar-row">
+                        <span>${escapeHtml(routeId)}</span>
+                        <div class="bar-track"><div class="bar-fill" style="width:${percent}%; background:${getRouteColor(routeId)}"></div></div>
+                        <b>${onboard}</b>
+                    </div>
+                `;
+            }).join("");
         }
 
         function rememberBusPoints() {
@@ -1394,9 +1738,11 @@
             renderRouteControls();
             renderStaticRouteLayers();
             renderTrafficSections();
+            renderScenarioLayers();
             updateKpis();
             updateBusDetail();
             updateDecisionCenter();
+            updateSystemAlerts();
             updateRecommendations();
             updateAnalytics();
         }
@@ -1440,6 +1786,33 @@
             }
         }
 
+        async function fetchRoute57ScenarioControl() {
+            try {
+                const response = await fetch(`${API_BASE}/api/scenario/route57`);
+                if (!response.ok) return;
+                const data = await response.json();
+                if (data.scenarioId && SCENARIOS[data.scenarioId] !== undefined) {
+                    selectedScenarioId = data.scenarioId;
+                    localStorage.setItem("dtScenarioId", selectedScenarioId);
+                    document.getElementById("scenario-select").value = selectedScenarioId;
+                }
+            } catch (error) {
+                console.warn("Scenario control API unavailable:", error);
+            }
+        }
+
+        async function updateRoute57ScenarioControl(scenarioId) {
+            try {
+                await fetch(`${API_BASE}/api/scenario/route57`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ scenarioId })
+                });
+            } catch (error) {
+                console.warn("Scenario control update unavailable:", error);
+            }
+        }
+
         document.getElementById("traffic-toggle").addEventListener("click", () => {
             trafficLayerEnabled = !trafficLayerEnabled;
             const button = document.getElementById("traffic-toggle");
@@ -1458,12 +1831,21 @@
             }
         });
 
+        document.getElementById("scenario-select").addEventListener("change", event => {
+            selectedScenarioId = event.target.value;
+            localStorage.setItem("dtScenarioId", selectedScenarioId);
+            updateRoute57ScenarioControl(selectedScenarioId);
+            renderAll();
+        });
+
         setInterval(() => {
             document.getElementById("current-time").textContent = new Date().toLocaleTimeString();
         }, 1000);
 
         async function boot() {
             document.getElementById("current-time").textContent = new Date().toLocaleTimeString();
+            document.getElementById("scenario-select").value = selectedScenarioId;
+            await fetchRoute57ScenarioControl();
             await loadAllRouteAssets();
             await fetchAstanaWeather();
             await fetchBuses();

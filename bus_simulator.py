@@ -26,6 +26,9 @@ BASE_DIR = Path(__file__).resolve().parent
 ROUTE_DIR = BASE_DIR / "data" / "routes" / "route_57"
 SHAPE_FILE = ROUTE_DIR / "route_57_shape.csv"
 STOPS_FILE = ROUTE_DIR / "route_57_stops.csv"
+ALT_SHAPE_FILE = ROUTE_DIR / "route_57_shape_alt.csv"
+ALT_STOPS_FILE = ROUTE_DIR / "route_57_stops_alt.csv"
+SCENARIO_CONTROL_FILE = BASE_DIR / "data" / "runtime" / "route57_scenario_control.json"
 
 # Old GPS file is used ONLY as a real speed profile.
 # It is NOT used as the route geometry anymore.
@@ -207,6 +210,7 @@ STATE_STOPPING_AT_STOP = "STOPPING_AT_STOP"
 STATE_EN_ROUTE_TO_UNSERVED_QUEUE = "EN_ROUTE_TO_UNSERVED_QUEUE"
 STATE_BOARDING_UNSERVED_QUEUE = "BOARDING_UNSERVED_QUEUE"
 STATE_CONTINUING_ROUTE_AFTER_PICKUP = "CONTINUING_ROUTE_AFTER_PICKUP"
+STATE_REROUTING_ACTIVE = "REROUTING_ACTIVE"
 STATE_COMPLETED_ROUTE = "COMPLETED_ROUTE"
 
 
@@ -416,9 +420,69 @@ REROUTE_RULES = {
     "upcoming_window_points": 18,
     "high_traffic_segments_threshold": 5,
     "average_speed_threshold_mps": 3.2,
-    "passenger_impact_threshold_meters": 450,
-    "alternative_route_exists": False
+    "passenger_impact_threshold_meters": 1000,
+    "alternative_route_exists": False,
+    "activation_second": 120,
+    "entry_buffer_points": 12,
+    "terminal_guard_points": 20
 }
+
+REROUTE_SCENARIO_STATES = {
+    "INACTIVE",
+    "ACTIVE_AHEAD",
+    "REROUTE_RECOMMENDED",
+    "REROUTING_ACTIVE",
+    "RESOLVED"
+}
+
+REROUTE_SCENARIO_REGISTRY = {
+    "R57_ROADWORKS_SARAISHYK": {
+        "scenarioId": "R57_ROADWORKS_SARAISHYK",
+        "routeId": "Route_57",
+        "incidentType": "ROADWORKS",
+        "title": "Roadworks near Saraishyk / Akmeshit corridor",
+        "description": "Lane maintenance and heavy congestion near Saraishyk, Akmeshit and Ministry district.",
+        "severity": "HIGH",
+        "expectedDelayMinutes": 8,
+        "affectedStops": [
+            "Улица Сарайшык",
+            "Улица Акмешит",
+            "Министерство иностранных дел"
+        ],
+        "activeByDefault": True
+    },
+    "R57_TRAFFIC_JAM_SARAISHYK": {
+        "scenarioId": "R57_TRAFFIC_JAM_SARAISHYK",
+        "routeId": "Route_57",
+        "incidentType": "TRAFFIC_JAM",
+        "title": "Severe congestion near Saraishyk / Akmeshit",
+        "description": "Traffic jam causing major delay on the normal Route_57 corridor.",
+        "severity": "HIGH",
+        "expectedDelayMinutes": 7,
+        "affectedStops": [
+            "РЈР»РёС†Р° РЎР°СЂР°Р№С€С‹Рє",
+            "РЈР»РёС†Р° РђРєРјРµС€РёС‚",
+            "РњРёРЅРёСЃС‚РµСЂСЃС‚РІРѕ РёРЅРѕСЃС‚СЂР°РЅРЅС‹С… РґРµР»"
+        ],
+        "activeByDefault": False
+    },
+    "R57_SECURITY_CLOSURE_MINISTRY": {
+        "scenarioId": "R57_SECURITY_CLOSURE_MINISTRY",
+        "routeId": "Route_57",
+        "incidentType": "SECURITY_CLOSURE",
+        "title": "Security closure near Ministry area",
+        "description": "Temporary government district closure near Ministry area.",
+        "severity": "HIGH",
+        "expectedDelayMinutes": 10,
+        "affectedStops": [
+            "Министерство иностранных дел"
+        ],
+        "activeByDefault": False
+    }
+}
+
+ACTIVE_REROUTE_SCENARIO_ID = "R57_ROADWORKS_SARAISHYK"
+NO_REROUTE_SCENARIO_ID = "NONE"
 
 
 # ==================================================
@@ -642,6 +706,94 @@ def load_route_stops() -> pd.DataFrame:
     if len(df) < 1:
         raise ValueError(f"{stops_file.name} must contain at least 1 stop.")
 
+    return df
+
+
+def normalize_stop_text(value) -> str:
+    text = str(value or "").strip()
+
+    try:
+        repaired = text.encode("cp1251").decode("utf-8")
+        if repaired:
+            text = repaired
+    except Exception:
+        pass
+
+    return text.lower().replace("ё", "е")
+
+
+def stop_name_matches(candidate: str, target: str) -> bool:
+    candidate_key = normalize_stop_text(candidate)
+    target_key = normalize_stop_text(target)
+    return bool(
+        candidate_key == target_key
+        or target_key in candidate_key
+        or candidate_key in target_key
+    )
+
+
+def load_optional_route_shape(shape_file: Path, label: str) -> pd.DataFrame:
+    if not Path(shape_file).exists():
+        print(f"WARNING: {label} missing: {shape_file}. Rerouting will HOLD_ROUTE / MONITOR.")
+        return pd.DataFrame()
+
+    try:
+        df = normalize_columns(read_csv_auto(shape_file))
+    except Exception as error:
+        print(f"WARNING: failed to read {label}: {error}. Rerouting will HOLD_ROUTE / MONITOR.")
+        return pd.DataFrame()
+
+    required_columns = {"point_sequence", "latitude", "longitude"}
+    missing_columns = required_columns - set(df.columns)
+
+    if missing_columns:
+        print(f"WARNING: {label} is missing columns {missing_columns}. Rerouting will HOLD_ROUTE / MONITOR.")
+        return pd.DataFrame()
+
+    df["point_sequence"] = to_number(df["point_sequence"])
+    df["latitude"] = to_number(df["latitude"])
+    df["longitude"] = to_number(df["longitude"])
+    df = df.dropna(subset=["point_sequence", "latitude", "longitude"])
+    df = df.sort_values("point_sequence").reset_index(drop=True)
+
+    if len(df) < 2:
+        print(f"WARNING: {label} has too few points. Rerouting will HOLD_ROUTE / MONITOR.")
+        return pd.DataFrame()
+
+    print(f"{label} loaded: {len(df)} points")
+    return df
+
+
+def load_optional_route_stops(stops_file: Path, label: str) -> pd.DataFrame:
+    if not Path(stops_file).exists():
+        print(f"WARNING: {label} missing: {stops_file}. Rerouting will HOLD_ROUTE / MONITOR.")
+        return pd.DataFrame()
+
+    try:
+        df = normalize_columns(read_csv_auto(stops_file))
+    except Exception as error:
+        print(f"WARNING: failed to read {label}: {error}. Rerouting will HOLD_ROUTE / MONITOR.")
+        return pd.DataFrame()
+
+    required_columns = {"stop_sequence", "stop_name", "latitude", "longitude"}
+    missing_columns = required_columns - set(df.columns)
+
+    if missing_columns:
+        print(f"WARNING: {label} is missing columns {missing_columns}. Alternative stops unavailable.")
+        return pd.DataFrame()
+
+    if "demand_level" not in df.columns:
+        df["demand_level"] = "MEDIUM"
+
+    df["stop_sequence"] = to_number(df["stop_sequence"])
+    df["latitude"] = to_number(df["latitude"])
+    df["longitude"] = to_number(df["longitude"])
+    df["stop_name"] = df["stop_name"].astype(str).str.strip()
+    df["demand_level"] = df["demand_level"].fillna("MEDIUM").astype(str).str.strip().str.upper()
+    df = df.dropna(subset=["stop_sequence", "stop_name", "latitude", "longitude"])
+    df = df.sort_values("stop_sequence").reset_index(drop=True)
+
+    print(f"{label} loaded: {len(df)} stops")
     return df
 
 
@@ -953,7 +1105,7 @@ def get_route_load_level(route_row) -> str:
 
 
 def normalize_text_for_matching(value) -> str:
-    return str(value or "").strip().lower().replace("ё", "е")
+    return normalize_stop_text(value).replace("ё", "е")
 
 
 def is_scenario_focus_stop(stop_name: str) -> bool:
@@ -1084,6 +1236,235 @@ def map_stops_to_route(route_df: pd.DataFrame, stops_df: pd.DataFrame):
         )
 
     return mapped_stops
+
+
+def nearest_route_index(route_df: pd.DataFrame, latitude: float, longitude: float) -> int:
+    best_index = 0
+    best_distance = None
+
+    for route_index, point in route_df.iterrows():
+        distance = distance_meters(
+            float(point["latitude"]),
+            float(point["longitude"]),
+            float(latitude),
+            float(longitude)
+        )
+
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_index = int(route_index)
+
+    return int(best_index)
+
+
+def find_mapped_stop_by_name(route_stops: list, stop_name: str):
+    for stop in route_stops:
+        if stop_name_matches(stop.get("name", ""), stop_name):
+            return stop
+
+    return None
+
+
+def replacement_quality(distance: float) -> str:
+    if distance <= 700:
+        return "GOOD"
+    if distance <= 1000:
+        return "ACCEPTABLE"
+    if distance <= 1500:
+        return "MARGINAL"
+    return "NOT_ALLOWED"
+
+
+def nearest_alternative_distance(stop: dict, alt_shape_df: pd.DataFrame, alt_stops_df: pd.DataFrame):
+    best_distance = None
+
+    for _, alt_stop in alt_stops_df.iterrows():
+        distance = distance_meters(
+            float(stop["latitude"]),
+            float(stop["longitude"]),
+            float(alt_stop["latitude"]),
+            float(alt_stop["longitude"])
+        )
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+
+    for _, point in alt_shape_df.iterrows():
+        distance = distance_meters(
+            float(stop["latitude"]),
+            float(stop["longitude"]),
+            float(point["latitude"]),
+            float(point["longitude"])
+        )
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+
+    return best_distance
+
+
+def validate_passenger_friendly_reroute(scenario: dict, route_stops: list, alt_shape_df: pd.DataFrame, alt_stops_df: pd.DataFrame):
+    results = []
+    max_distance = None
+    rerouting_allowed = True
+    passenger_impact = "LOW"
+
+    if alt_shape_df is None or alt_shape_df.empty:
+        return {
+            "affectedStops": [],
+            "passengerImpact": "HIGH",
+            "maxWalkingDistanceMeters": None,
+            "reroutingAllowed": False
+        }
+
+    for stop_name in scenario.get("affectedStops", []):
+        stop = find_mapped_stop_by_name(route_stops, stop_name)
+
+        if stop is None:
+            print(f"WARNING: affected stop not found on {scenario['routeId']}: {stop_name}")
+            continue
+
+        distance = nearest_alternative_distance(stop, alt_shape_df, alt_stops_df)
+        rounded_distance = int(round(distance)) if distance is not None else None
+        quality = replacement_quality(float(distance or 999999))
+        demand_level = str(stop.get("demandLevel", "MEDIUM")).upper()
+
+        if rounded_distance is not None:
+            max_distance = rounded_distance if max_distance is None else max(max_distance, rounded_distance)
+
+        if quality == "NOT_ALLOWED" or (demand_level == "HIGH" and rounded_distance is not None and rounded_distance > 1000):
+            rerouting_allowed = False
+            passenger_impact = "HIGH"
+        elif quality == "MARGINAL":
+            passenger_impact = "HIGH"
+        elif quality == "ACCEPTABLE" and passenger_impact != "HIGH":
+            passenger_impact = "MEDIUM"
+
+        results.append({
+            "stopName": scenario_stop_display_name(stop, stop_name),
+            "routeIndex": int(stop["routeIndex"]),
+            "demandLevel": demand_level,
+            "nearestAlternativeDistanceMeters": rounded_distance,
+            "replacementQuality": quality
+        })
+
+    if not results:
+        rerouting_allowed = False
+        passenger_impact = "HIGH"
+
+    if max_distance is not None and max_distance > 1000:
+        rerouting_allowed = False
+        if max_distance > 1500:
+            passenger_impact = "HIGH"
+
+    return {
+        "affectedStops": results,
+        "passengerImpact": passenger_impact,
+        "maxWalkingDistanceMeters": max_distance,
+        "reroutingAllowed": bool(rerouting_allowed and passenger_impact != "HIGH")
+    }
+
+
+def scenario_stop_display_name(stop: dict, fallback: str) -> str:
+    name = str(stop.get("name") or fallback)
+    try:
+        return name.encode("cp1251").decode("utf-8")
+    except Exception:
+        return fallback or name
+
+
+def get_requested_route57_scenario_id() -> str:
+    if not SCENARIO_CONTROL_FILE.exists():
+        return ACTIVE_REROUTE_SCENARIO_ID
+
+    try:
+        with SCENARIO_CONTROL_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except Exception as error:
+        print(f"WARNING: failed to read scenario control file: {error}. Using default scenario.")
+        return ACTIVE_REROUTE_SCENARIO_ID
+
+    scenario_id = str(data.get("scenarioId", ACTIVE_REROUTE_SCENARIO_ID))
+    if scenario_id == NO_REROUTE_SCENARIO_ID:
+        return scenario_id
+    if scenario_id not in REROUTE_SCENARIO_REGISTRY:
+        print(f"WARNING: unknown Route_57 scenario '{scenario_id}'. Using default scenario.")
+        return ACTIVE_REROUTE_SCENARIO_ID
+    return scenario_id
+
+
+def build_route57_scenario_context(route_context: dict, scenario_id: str = None):
+    if route_context["route_id"] != "Route_57":
+        return None
+
+    scenario_id = scenario_id or get_requested_route57_scenario_id()
+    if scenario_id == NO_REROUTE_SCENARIO_ID:
+        print("Route_57 rerouting scenario: NONE")
+        return None
+
+    scenario = dict(REROUTE_SCENARIO_REGISTRY[scenario_id])
+    alt_shape_df = load_optional_route_shape(ALT_SHAPE_FILE, "Route_57 alternative route")
+    alt_stops_df = load_optional_route_stops(ALT_STOPS_FILE, "Route_57 alternative stops")
+    route_df = route_context["route_df"]
+    route_stops = route_context["route_stops"]
+
+    matched_stops = []
+    for stop_name in scenario.get("affectedStops", []):
+        stop = find_mapped_stop_by_name(route_stops, stop_name)
+        if stop is not None:
+            matched_stops.append(stop)
+        else:
+            print(f"WARNING: affected stop could not be mapped: {stop_name}")
+
+    affected_start = min((int(stop["routeIndex"]) for stop in matched_stops), default=None)
+    affected_end = max((int(stop["routeIndex"]) for stop in matched_stops), default=None)
+
+    if not alt_shape_df.empty:
+        entry_index = nearest_route_index(
+            route_df,
+            float(alt_shape_df.iloc[0]["latitude"]),
+            float(alt_shape_df.iloc[0]["longitude"])
+        )
+        exit_index = nearest_route_index(
+            route_df,
+            float(alt_shape_df.iloc[-1]["latitude"]),
+            float(alt_shape_df.iloc[-1]["longitude"])
+        )
+    else:
+        entry_index = affected_start
+        exit_index = affected_end
+
+    reconnect_index = None
+    if affected_end is not None:
+        reconnect_index = min(len(route_df) - 1, int(affected_end) + 1)
+    if exit_index is not None:
+        reconnect_index = max(int(exit_index), int(reconnect_index or exit_index))
+        reconnect_index = min(len(route_df) - 1, reconnect_index)
+
+    validation = validate_passenger_friendly_reroute(scenario, route_stops, alt_shape_df, alt_stops_df)
+
+    print(
+        "Route_57 affected segment:",
+        f"start={affected_start}, end={affected_end}, entry={entry_index}, reconnect={reconnect_index}"
+    )
+    print(
+        "Route_57 passenger reroute validation:",
+        f"impact={validation['passengerImpact']},",
+        f"maxWalk={validation['maxWalkingDistanceMeters']}m,",
+        f"allowed={validation['reroutingAllowed']}"
+    )
+
+    return {
+        "scenario": scenario,
+        "state": "INACTIVE",
+        "activated": False,
+        "completed": False,
+        "altShape": alt_shape_df,
+        "altStops": alt_stops_df,
+        "affectedStartRouteIndex": affected_start,
+        "affectedEndRouteIndex": affected_end,
+        "entryRouteIndex": entry_index,
+        "reconnectRouteIndex": reconnect_index,
+        "passengerValidation": validation
+    }
 
 
 def initialize_bus_positions(stops, route_id=None):
@@ -2171,9 +2552,83 @@ def get_current_timestamp():
     return datetime.now().isoformat(timespec="seconds")
 
 
+def apply_rerouting_telemetry_fields(telemetry: dict, bus: dict, route_context: dict = None) -> dict:
+    scenario_context = route_context.get("scenario_context") if isinstance(route_context, dict) else None
+
+    if scenario_context is None:
+        telemetry.update({
+            "operationalState": bus.get("state", "IN_SERVICE"),
+            "reroutingDecision": "NORMAL",
+            "reroutingActive": False
+        })
+        return telemetry
+
+    decision = evaluate_rerouting_decision(bus=bus, route_context=route_context, scenario_context=scenario_context)
+    scenario = scenario_context["scenario"]
+
+    telemetry.update({
+        "operationalState": bus.get("state", "IN_SERVICE"),
+        "scenarioId": decision.get("scenarioId"),
+        "incidentType": decision.get("incidentType"),
+        "incidentTitle": decision.get("title"),
+        "incidentDescription": scenario.get("description"),
+        "reroutingDecision": decision.get("decisionType"),
+        "reroutingActive": bool(bus.get("reroutingActive", False)),
+        "affectedSegmentStartIndex": decision.get("affectedSegmentStartIndex"),
+        "affectedSegmentEndIndex": decision.get("affectedSegmentEndIndex"),
+        "alternativeRouteId": decision.get("alternativeRouteId"),
+        "passengerImpact": decision.get("passengerImpact"),
+        "maxWalkingDistanceMeters": decision.get("maxWalkingDistanceMeters"),
+        "expectedDelayMinutes": scenario.get("expectedDelayMinutes"),
+        "savedMinutes": decision.get("savedMinutes"),
+        "reroutingRecommendation": decision,
+        "scenarioState": scenario_context.get("state", "INACTIVE")
+    })
+    return telemetry
+
+
+def apply_support_decision_telemetry_fields(telemetry: dict, bus: dict) -> dict:
+    queue = int(telemetry.get("waitingPassengers", 0) or 0)
+    capacity = int(bus.get("capacity", BUS_CAPACITY))
+    passengers = int(bus.get("passengerCount", 0))
+    trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
+    near_capacity = passengers >= max(0, capacity - 3)
+
+    if bus.get("busRole") == "SUPPORT":
+        telemetry.update({
+            "supportDecision": "SUPPORT_OPERATING",
+            "supportRecommended": False,
+            "supportAction": "Support operating",
+            "supportRouteId": bus.get("routeId"),
+            "supportTargetStopName": bus.get("targetStopName"),
+            "supportOriginDescription": bus.get("originDescription")
+        })
+        return telemetry
+
+    if queue >= trigger_queue and near_capacity:
+        support_decision = "DISPATCH_SUPPORT_BUS"
+        action = "Dispatch support bus"
+    elif queue > 0:
+        support_decision = "MONITOR_QUEUE"
+        action = "Monitor queue"
+    else:
+        support_decision = "NORMAL"
+        action = "No support needed"
+
+    telemetry.update({
+        "supportDecision": support_decision,
+        "supportRecommended": support_decision == "DISPATCH_SUPPORT_BUS",
+        "supportAction": action,
+        "supportTriggerQueue": trigger_queue,
+        "supportRouteId": get_support_rule("support_route_id", SUPPORT_BUS_ROUTE_ID)
+    })
+    return telemetry
+
+
 def evaluate_rerouting_decision(
     bus,
     route_context=None,
+    scenario_context=None,
     route_df=None,
     route_index: int = None,
     speed: float = None,
@@ -2181,11 +2636,100 @@ def evaluate_rerouting_decision(
     event_type: str = None,
     emergency_event: bool = False
 ) -> dict:
-    """
-    Passenger-friendly rerouting preparation.
-    No route is changed unless a predefined alternative route exists and the
-    passenger impact is acceptable.
-    """
+    """Evaluate Smart City reroute decision without breaking legacy telemetry."""
+    if route_context is not None and scenario_context is None:
+        scenario_context = route_context.get("scenario_context")
+
+    if scenario_context is not None:
+        scenario = scenario_context["scenario"]
+        validation = scenario_context["passengerValidation"]
+        current_index = int(bus.get("normalResumeIndex", bus.get("current_index", route_index or 0)))
+        affected_start = scenario_context.get("affectedStartRouteIndex")
+        affected_end = scenario_context.get("affectedEndRouteIndex")
+        entry_index = scenario_context.get("entryRouteIndex")
+        reconnect_index = scenario_context.get("reconnectRouteIndex")
+        state = scenario_context.get("state", "INACTIVE")
+        alt_available = not scenario_context.get("altShape", pd.DataFrame()).empty
+        expected_delay = int(scenario.get("expectedDelayMinutes", 0))
+        route_length = len(route_context.get("route_df", [])) if route_context else 0
+        incident_ahead = (
+            affected_end is not None
+            and current_index < int(affected_end)
+            and current_index > int(REROUTE_RULES["terminal_guard_points"])
+            and (not route_length or current_index < route_length - int(REROUTE_RULES["terminal_guard_points"]))
+        )
+        approaching_entry = entry_index is not None and current_index >= max(0, int(entry_index) - int(REROUTE_RULES["entry_buffer_points"]))
+        saved_minutes = max(0, expected_delay - 2) if alt_available and validation["reroutingAllowed"] else None
+
+        if bus.get("busId") != "Bus_1" or bus.get("routeContextId") != "Route_57":
+            decision_type = "NORMAL"
+            action = "Monitor"
+            reason = "Rerouting pilot is limited to Route_57 Bus_1."
+        elif state in {"REROUTING_ACTIVE"} or bus.get("reroutingActive"):
+            decision_type = "REROUTING_ACTIVE"
+            action = "Use alternative route"
+            reason = "Bus is following the alternative corridor."
+        elif state in {"RESOLVED"}:
+            decision_type = "NORMAL"
+            action = "Monitor"
+            reason = "Reroute completed; bus returned to normal Route_57."
+        elif state == "INACTIVE":
+            decision_type = "MONITOR"
+            action = "Monitor"
+            reason = "Scenario is registered but not active yet."
+        elif not alt_available:
+            decision_type = "HOLD_ROUTE"
+            action = "Hold normal route"
+            reason = "Alternative route files are missing or invalid."
+        elif not incident_ahead:
+            decision_type = "MONITOR"
+            action = "Monitor"
+            reason = "Incident is not ahead of the selected bus."
+        elif not validation["reroutingAllowed"] or validation["passengerImpact"] == "HIGH":
+            decision_type = "HOLD_ROUTE"
+            action = "Hold normal route"
+            reason = "Passenger walking impact is too high for rerouting."
+        elif int(bus.get("passengerCount", 0)) >= int(bus.get("capacity", BUS_CAPACITY)) and validation["passengerImpact"] != "LOW":
+            decision_type = "SUPPORT_BUS_INSTEAD"
+            action = "Hold normal route"
+            reason = "Crowded bus and passenger-heavy skipped corridor favor support-bus intervention."
+        elif expected_delay < 5:
+            decision_type = "HOLD_ROUTE"
+            action = "Monitor"
+            reason = "Expected delay is too small for rerouting."
+        elif approaching_entry:
+            decision_type = "REROUTE_RECOMMENDED"
+            action = "Use alternative route"
+            reason = "Roadworks and congestion are ahead; validated alternative corridor is available."
+        else:
+            decision_type = "MONITOR"
+            action = "Monitor"
+            reason = "Incident is ahead; waiting until bus approaches the reroute entry point."
+
+        return {
+            "decisionType": decision_type,
+            "scenarioId": scenario["scenarioId"],
+            "incidentType": scenario["incidentType"],
+            "title": scenario["title"],
+            "description": scenario["description"],
+            "reason": reason,
+            "severity": scenario["severity"],
+            "normalEtaMinutes": expected_delay if decision_type != "NORMAL" else None,
+            "alternativeEtaMinutes": 2 if alt_available and validation["reroutingAllowed"] else None,
+            "savedMinutes": saved_minutes,
+            "passengerImpact": validation["passengerImpact"],
+            "affectedStops": validation["affectedStops"],
+            "maxWalkingDistanceMeters": validation["maxWalkingDistanceMeters"],
+            "reroutingAllowed": bool(validation["reroutingAllowed"]),
+            "action": action,
+            "scenarioState": state,
+            "affectedSegmentStartIndex": affected_start,
+            "affectedSegmentEndIndex": affected_end,
+            "alternativeRouteId": "Route_57_ALT" if alt_available else None,
+            "entryRouteIndex": entry_index,
+            "reconnectRouteIndex": reconnect_index
+        }
+
     reasons = []
     if route_context is not None and isinstance(route_context, dict):
         route_df = route_context.get("route_df", route_df)
@@ -2251,8 +2795,8 @@ def evaluate_rerouting_decision(
     }
 
 
-def build_stop_telemetry(route_row, bus, route_index: int):
-    return {
+def build_stop_telemetry(route_row, bus, route_index: int, route_context=None):
+    telemetry = {
         "busId": bus["busId"],
         "routeId": bus["routeId"],
         "timestamp": get_current_timestamp(),
@@ -2282,9 +2826,11 @@ def build_stop_telemetry(route_row, bus, route_index: int):
         "originReserveName": bus.get("originReserveName"),
         "dynamicReserve": bus.get("dynamicReserve")
     }
+    telemetry = apply_support_decision_telemetry_fields(telemetry, bus)
+    return apply_rerouting_telemetry_fields(telemetry, bus, route_context)
 
 
-def build_moving_telemetry(route_row, bus, route_index: int, route_df=None):
+def build_moving_telemetry(route_row, bus, route_index: int, route_df=None, route_context=None):
     base_speed = float(route_row.get("real_speed", FALLBACK_SPEED_MPS))
     speed = adapt_speed_for_bus(base_speed)
     traffic_level = speed_to_traffic_level(speed)
@@ -2300,6 +2846,7 @@ def build_moving_telemetry(route_row, bus, route_index: int, route_df=None):
 
     rerouting_recommendation = evaluate_rerouting_decision(
         bus=bus,
+        route_context=route_context,
         route_df=route_df,
         route_index=route_index,
         speed=speed,
@@ -2307,7 +2854,7 @@ def build_moving_telemetry(route_row, bus, route_index: int, route_df=None):
         event_type=event_type
     )
 
-    return {
+    telemetry = {
         "busId": bus["busId"],
         "routeId": bus["routeId"],
         "timestamp": get_current_timestamp(),
@@ -2338,6 +2885,8 @@ def build_moving_telemetry(route_row, bus, route_index: int, route_df=None):
         "dynamicReserve": bus.get("dynamicReserve"),
         "reroutingRecommendation": rerouting_recommendation
     }
+    telemetry = apply_support_decision_telemetry_fields(telemetry, bus)
+    return apply_rerouting_telemetry_fields(telemetry, bus, route_context)
 
 
 def publish_telemetry(client, telemetry):
@@ -2421,6 +2970,7 @@ def build_route_context(route_config: dict):
 
     route_context["route_df"] = route_df
     route_context["route_stops"] = route_stops
+    route_context["scenario_context"] = build_route57_scenario_context(route_context)
     return route_context
 
 
@@ -2448,6 +2998,111 @@ def build_active_route_contexts():
         contexts[route_id] = build_route_context(route_config)
 
     return contexts
+
+
+def update_route57_scenario_state(bus: dict, route_context: dict, simulation_second: int):
+    requested_scenario_id = get_requested_route57_scenario_id()
+    scenario_context = route_context.get("scenario_context")
+
+    if requested_scenario_id == NO_REROUTE_SCENARIO_ID:
+        route_context["scenario_context"] = None
+        bus["reroutingActive"] = False
+        if bus.get("state") == STATE_REROUTING_ACTIVE:
+            bus["state"] = STATE_IN_SERVICE
+        return
+
+    if (
+        scenario_context is None
+        or scenario_context.get("scenario", {}).get("scenarioId") != requested_scenario_id
+    ):
+        if not bus.get("reroutingActive"):
+            route_context["scenario_context"] = build_route57_scenario_context(route_context, requested_scenario_id)
+            scenario_context = route_context.get("scenario_context")
+
+    if scenario_context is None or bus.get("busId") != "Bus_1" or bus.get("routeContextId") != "Route_57":
+        return
+
+    if scenario_context.get("state") == "RESOLVED":
+        return
+
+    current_index = int(bus.get("current_index", 0))
+    affected_start = scenario_context.get("affectedStartRouteIndex")
+    affected_end = scenario_context.get("affectedEndRouteIndex")
+    entry_index = scenario_context.get("entryRouteIndex")
+
+    if affected_start is None or affected_end is None:
+        scenario_context["state"] = "INACTIVE"
+        return
+
+    route_length = len(route_context.get("route_df", []))
+    if current_index <= int(REROUTE_RULES["terminal_guard_points"]):
+        return
+    if route_length and current_index >= route_length - int(REROUTE_RULES["terminal_guard_points"]):
+        return
+    if current_index >= int(affected_end):
+        if scenario_context.get("activated"):
+            scenario_context["state"] = "RESOLVED"
+        return
+    if int(simulation_second) < int(REROUTE_RULES["activation_second"]):
+        return
+
+    scenario_context["activated"] = True
+    decision = evaluate_rerouting_decision(bus=bus, route_context=route_context, scenario_context=scenario_context)
+
+    if bus.get("reroutingActive"):
+        scenario_context["state"] = "REROUTING_ACTIVE"
+    elif decision["decisionType"] == "REROUTE_RECOMMENDED":
+        scenario_context["state"] = "REROUTE_RECOMMENDED"
+    else:
+        scenario_context["state"] = "ACTIVE_AHEAD"
+
+    can_start_reroute = (
+        scenario_context["state"] == "REROUTE_RECOMMENDED"
+        and entry_index is not None
+        and current_index >= int(entry_index)
+        and not bus.get("reroutingActive")
+        and not scenario_context.get("completed")
+    )
+
+    if can_start_reroute:
+        bus["normalResumeIndex"] = current_index
+        bus["reroutingActive"] = True
+        bus["rerouteAltIndex"] = 0
+        bus["state"] = STATE_REROUTING_ACTIVE
+        scenario_context["state"] = "REROUTING_ACTIVE"
+        print(
+            f"REROUTE START {bus['busId']} | "
+            f"scenario={scenario_context['scenario']['scenarioId']} | "
+            f"normal_idx={current_index} -> alt route"
+        )
+
+
+def complete_route57_reroute(bus: dict, route_context: dict):
+    scenario_context = route_context.get("scenario_context")
+    if scenario_context is None:
+        return
+
+    reconnect_index = scenario_context.get("reconnectRouteIndex")
+    route_stops = route_context["route_stops"]
+
+    bus["reroutingActive"] = False
+    bus["rerouteAltIndex"] = None
+    bus["current_index"] = int(reconnect_index or bus.get("current_index", 0))
+    bus["state"] = STATE_IN_SERVICE
+
+    for index, stop in enumerate(route_stops):
+        if int(stop["routeIndex"]) >= int(bus["current_index"]):
+            bus["nextStopIndex"] = index
+            break
+    else:
+        bus["nextStopIndex"] = len(route_stops)
+
+    scenario_context["state"] = "RESOLVED"
+    scenario_context["completed"] = True
+    print(
+        f"REROUTE COMPLETE {bus['busId']} | "
+        f"reconnected to Route_57 at index {bus['current_index']}"
+    )
 
 
 # ==================================================
@@ -2527,6 +3182,36 @@ def main():
             activate_route_context(route_context)
             route_df = route_context["route_df"]
             route_stops = route_context["route_stops"]
+            update_route57_scenario_state(bus, route_context, simulation_second)
+
+            if bus.get("reroutingActive") and bus.get("busId") == "Bus_1":
+                scenario_context = route_context.get("scenario_context")
+                alt_df = scenario_context.get("altShape", pd.DataFrame()) if scenario_context else pd.DataFrame()
+                alt_index = int(bus.get("rerouteAltIndex", 0) or 0)
+
+                if alt_df.empty:
+                    print("WARNING: rerouting active but alternative route is unavailable. Holding normal route.")
+                    bus["reroutingActive"] = False
+                    bus["state"] = STATE_IN_SERVICE
+                elif alt_index >= len(alt_df):
+                    complete_route57_reroute(bus, route_context)
+                else:
+                    simulation_active = True
+                    alt_row = alt_df.iloc[alt_index]
+                    telemetry = build_moving_telemetry(
+                        alt_row,
+                        bus,
+                        alt_index,
+                        route_df=alt_df,
+                        route_context=route_context
+                    )
+                    telemetry["eventType"] = "REROUTING"
+                    telemetry["trafficLevel"] = telemetry.get("trafficLevel", "LOW")
+                    telemetry["routeIndex"] = int(alt_index)
+                    publish_telemetry(client, telemetry)
+                    bus["rerouteAltIndex"] = alt_index + 1
+                    continue
+
             current_index = int(bus["current_index"])
 
             if current_index >= len(route_df):
@@ -2547,7 +3232,7 @@ def main():
             route_row = route_df.iloc[current_index]
 
             if bus["dwellRemaining"] > 0:
-                telemetry = build_stop_telemetry(route_row, bus, current_index)
+                telemetry = build_stop_telemetry(route_row, bus, current_index, route_context=route_context)
                 bus["dwellRemaining"] -= 1
                 reset_stop_state_if_needed(bus)
 
@@ -2556,12 +3241,18 @@ def main():
 
                 if arrived_stop is not None:
                     start_dwell_at_stop(bus, arrived_stop, route_row, current_index)
-                    telemetry = build_stop_telemetry(route_row, bus, current_index)
+                    telemetry = build_stop_telemetry(route_row, bus, current_index, route_context=route_context)
                     bus["dwellRemaining"] -= 1
                     reset_stop_state_if_needed(bus)
 
                 else:
-                    telemetry = build_moving_telemetry(route_row, bus, current_index, route_df=route_df)
+                    telemetry = build_moving_telemetry(
+                        route_row,
+                        bus,
+                        current_index,
+                        route_df=route_df,
+                        route_context=route_context
+                    )
                     bus["current_index"] += 1
 
             publish_telemetry(client, telemetry)

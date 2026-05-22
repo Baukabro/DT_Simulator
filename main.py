@@ -4,7 +4,7 @@ from urllib.parse import quote
 import json
 
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 
@@ -12,6 +12,14 @@ import psycopg2
 BASE_DIR = Path(__file__).resolve().parent
 ROUTE_DIR = BASE_DIR / "data" / "routes" / "route_57"
 STOPS_FILE = ROUTE_DIR / "route_57_stops.csv"
+SCENARIO_CONTROL_FILE = BASE_DIR / "data" / "runtime" / "route57_scenario_control.json"
+
+ALLOWED_ROUTE57_SCENARIOS = {
+    "NONE",
+    "R57_ROADWORKS_SARAISHYK",
+    "R57_TRAFFIC_JAM_SARAISHYK",
+    "R57_SECURITY_CLOSURE_MINISTRY"
+}
 
 app = FastAPI()
 
@@ -116,6 +124,42 @@ def root():
         "message": "Digital Twin API is running",
         "stopsFile": str(STOPS_FILE)
     }
+
+
+def read_route57_scenario_control():
+    if not SCENARIO_CONTROL_FILE.exists():
+        return {"scenarioId": "R57_ROADWORKS_SARAISHYK"}
+
+    try:
+        with SCENARIO_CONTROL_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except Exception:
+        return {"scenarioId": "R57_ROADWORKS_SARAISHYK"}
+
+    scenario_id = str(data.get("scenarioId", "R57_ROADWORKS_SARAISHYK"))
+    if scenario_id not in ALLOWED_ROUTE57_SCENARIOS:
+        scenario_id = "R57_ROADWORKS_SARAISHYK"
+
+    return {"scenarioId": scenario_id}
+
+
+@app.get("/api/scenario/route57")
+def get_route57_scenario():
+    return read_route57_scenario_control()
+
+
+@app.post("/api/scenario/route57")
+def set_route57_scenario(payload: dict = Body(...)):
+    scenario_id = str(payload.get("scenarioId", "NONE"))
+
+    if scenario_id not in ALLOWED_ROUTE57_SCENARIOS:
+        raise HTTPException(status_code=400, detail="Unsupported Route_57 scenario")
+
+    SCENARIO_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with SCENARIO_CONTROL_FILE.open("w", encoding="utf-8") as file:
+        json.dump({"scenarioId": scenario_id}, file, ensure_ascii=False, indent=2)
+
+    return {"scenarioId": scenario_id}
 
 
 @app.get("/api/buses/latest")
