@@ -637,6 +637,80 @@
             color: var(--muted);
         }
 
+        .eta-popup {
+            width: 280px;
+            max-height: 330px;
+            overflow: auto;
+        }
+
+        .eta-stop-title {
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .eta-routes {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .eta-route-group {
+            border-top: 1px solid #e4edf1;
+            padding-top: 7px;
+            margin-top: 7px;
+        }
+
+        .eta-route-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 5px;
+        }
+
+        .eta-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            align-items: start;
+            padding: 5px 0;
+            font-size: 12px;
+        }
+
+        .eta-meta {
+            color: var(--muted);
+            font-size: 10px;
+            margin-top: 2px;
+        }
+
+        .eta-badge {
+            border-radius: 999px;
+            padding: 3px 7px;
+            background: #ecf8f0;
+            color: var(--green);
+            font-size: 10px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .eta-badge.delayed,
+        .eta-badge.rerouted {
+            background: #fff4e1;
+            color: var(--amber);
+        }
+
+        .eta-badge.support {
+            background: #e7fbf6;
+            color: #078a78;
+        }
+
+        .eta-badge.arriving {
+            background: #edf6ff;
+            color: var(--blue);
+        }
+
         @media (max-width: 1180px) {
             body {
                 overflow: auto;
@@ -891,6 +965,47 @@
             return num(bus?.speed) * 3.6;
         }
 
+        function normalizeStopName(value) {
+            return String(value || "").trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+        }
+
+        function distanceMeters(latA, lonA, latB, lonB) {
+            const earthRadius = 6371000;
+            const toRad = degrees => degrees * Math.PI / 180;
+            const dLat = toRad(latB - latA);
+            const dLon = toRad(lonB - lonA);
+            const a = Math.sin(dLat / 2) ** 2
+                + Math.cos(toRad(latA)) * Math.cos(toRad(latB)) * Math.sin(dLon / 2) ** 2;
+            return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        function enrichRouteData(data) {
+            let cumulative = 0;
+            data.shape.forEach((point, index) => {
+                if (index > 0) {
+                    const previous = data.shape[index - 1];
+                    cumulative += distanceMeters(previous.latitude, previous.longitude, point.latitude, point.longitude);
+                }
+                point.routeIndex = index;
+                point.distanceMeters = cumulative;
+            });
+
+            data.stops.forEach(stop => {
+                let bestIndex = 0;
+                let bestDistance = Infinity;
+                data.shape.forEach((point, index) => {
+                    const distance = distanceMeters(stop.latitude, stop.longitude, point.latitude, point.longitude);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        bestIndex = index;
+                    }
+                });
+                stop.routeIndex = bestIndex;
+                stop.distanceToRoute = bestDistance;
+                stop.normalizedName = normalizeStopName(stop.name);
+            });
+        }
+
         function getRouteConfig(routeId) {
             return ROUTES[normalizeRouteId(routeId)] || ROUTES.Route_57;
         }
@@ -1041,6 +1156,7 @@
                 }
             }
 
+            if (data.hasShape) enrichRouteData(data);
             routeData[route.id] = data;
         }
 
@@ -1128,16 +1244,14 @@
                 const stopLayer = L.layerGroup();
                 if (route.showStops && data.stops?.length) {
                     data.stops.forEach(stop => {
-                        L.marker([stop.latitude, stop.longitude], { icon: makeStopIcon(route) })
-                            .bindPopup(`
-                                <div>
-                                    <div class="popup-title">${escapeHtml(stop.name)}</div>
-                                    <div class="popup-row"><span>Route</span><b>${escapeHtml(route.id)}</b></div>
-                                    <div class="popup-row"><span>Stop</span><b>${stop.sequence}</b></div>
-                                    <div class="popup-row"><span>Demand</span><b>${escapeHtml(stop.demandLevel)}</b></div>
-                                </div>
-                            `)
-                            .addTo(stopLayer);
+                        const marker = L.marker([stop.latitude, stop.longitude], { icon: makeStopIcon(route) })
+                            .bindPopup(buildStopEtaPopup(stop, route.id));
+
+                        marker.on("click", () => {
+                            marker.setPopupContent(buildStopEtaPopup(stop, route.id));
+                        });
+
+                        marker.addTo(stopLayer);
                     });
                     stopLayer.addTo(map);
                 }
@@ -1167,6 +1281,241 @@
             });
 
             return bestIndex;
+        }
+
+        function routeDistanceBetween(routeId, startIndex, endIndex) {
+            const shape = routeData[routeId]?.shape || [];
+            if (!shape.length || startIndex < 0 || endIndex < 0 || endIndex < startIndex) return 0;
+            const start = shape[Math.min(startIndex, shape.length - 1)]?.distanceMeters || 0;
+            const end = shape[Math.min(endIndex, shape.length - 1)]?.distanceMeters || 0;
+            return Math.max(0, end - start);
+        }
+
+        function routeAverageSpeed(routeId) {
+            const buses = latestBuses.filter(bus => normalizeRouteId(bus.routeId) === routeId && num(bus.speed) > 1);
+            if (buses.length) {
+                return Math.max(4, buses.reduce((sum, bus) => sum + num(bus.speed), 0) / buses.length);
+            }
+            return 7.5;
+        }
+
+        function stopDwellSeconds(stop) {
+            const demand = String(stop?.demandLevel || "MEDIUM").toUpperCase();
+            if (demand === "HIGH") return 42;
+            if (demand === "LOW") return 12;
+            return 24;
+        }
+
+        function trafficMultiplier(level) {
+            const normalized = String(level || "LOW").toUpperCase();
+            if (normalized === "HIGH") return 1.6;
+            if (normalized === "MEDIUM") return 1.25;
+            return 1;
+        }
+
+        function stopCluster(clickedStop, clickedRouteId) {
+            const nameKey = normalizeStopName(clickedStop.name);
+            const cluster = [];
+
+            Object.values(ROUTES).forEach(route => {
+                const stops = routeData[route.id]?.stops || [];
+                stops.forEach(stop => {
+                    const sameName = stop.normalizedName && stop.normalizedName === nameKey;
+                    const nearby = distanceMeters(clickedStop.latitude, clickedStop.longitude, stop.latitude, stop.longitude) <= 140;
+                    if ((sameName && nearby) || (route.id === clickedRouteId && Number(stop.sequence) === Number(clickedStop.sequence))) {
+                        cluster.push({ routeId: route.id, stop });
+                    }
+                });
+            });
+
+            return cluster;
+        }
+
+        function route57AffectedBounds() {
+            const stops = routeData.Route_57?.stops || [];
+            const affected = stops.filter(stop => [9, 10, 11].includes(Number(stop.sequence)));
+            if (!affected.length) return null;
+            return {
+                start: Math.min(...affected.map(stop => stop.routeIndex)),
+                end: Math.max(...affected.map(stop => stop.routeIndex)),
+                stops: affected
+            };
+        }
+
+        function nearestAlternativeDistanceForStop(stop) {
+            const data = routeData.Route_57 || {};
+            const candidates = [...(data.altStops || []), ...(data.altShape || [])];
+            if (!candidates.length) return null;
+            return Math.round(Math.min(...candidates.map(point =>
+                distanceMeters(stop.latitude, stop.longitude, point.latitude, point.longitude)
+            )));
+        }
+
+        function route57StopAffectedByScenario(routeId, stop) {
+            if (routeId !== "Route_57" || selectedScenarioId === "NONE") return false;
+            const bounds = route57AffectedBounds();
+            return Boolean(bounds && stop.routeIndex >= bounds.start && stop.routeIndex <= bounds.end);
+        }
+
+        function estimateArrival(bus, routeId, stop) {
+            const role = isSupportBus(bus) ? "SUPPORT" : "MAIN";
+            const shape = routeData[routeId]?.shape || [];
+            if (shape.length < 2) return null;
+
+            if (role === "SUPPORT" && normalizeRouteId(bus.routeId) !== routeId) return null;
+            if (role === "SUPPORT" && bus.supportTargetStopName && normalizeStopName(bus.supportTargetStopName) !== normalizeStopName(stop.name)) {
+                const currentIndexForSupport = nearestShapeIndex(routeId, num(bus.latitude), num(bus.longitude));
+                if (currentIndexForSupport > stop.routeIndex) return null;
+            }
+
+            const currentIndex = Number.isFinite(num(bus.currentRouteIndex, NaN))
+                ? Math.floor(num(bus.currentRouteIndex))
+                : nearestShapeIndex(routeId, num(bus.latitude), num(bus.longitude));
+
+            if (currentIndex < 0 || currentIndex > stop.routeIndex) return null;
+
+            const distanceToStop = distanceMeters(num(bus.latitude), num(bus.longitude), stop.latitude, stop.longitude);
+            const atStop = distanceToStop <= 80 || (
+                bus.eventType === "STOP"
+                && normalizeStopName(bus.currentStopName) === normalizeStopName(stop.name)
+            );
+
+            if (atStop) {
+                return {
+                    routeId,
+                    busId: bus.busId,
+                    etaMinutes: 0,
+                    etaLabel: bus.doorStatus === "OPEN" ? "at stop" : "arriving",
+                    delayMinutes: 0,
+                    status: role === "SUPPORT" ? "SUPPORT" : "ARRIVING",
+                    role,
+                    passengers: num(bus.passengerCount),
+                    trafficLevel: bus.trafficLevel || "LOW",
+                    note: role === "SUPPORT" ? "support bus" : ""
+                };
+            }
+
+            const distanceAlongRoute = routeDistanceBetween(routeId, currentIndex, stop.routeIndex);
+            const currentSpeed = num(bus.speed);
+            const baseSpeed = currentSpeed > 1 ? currentSpeed : routeAverageSpeed(routeId);
+            const multiplier = trafficMultiplier(bus.trafficLevel);
+            const intermediateStops = (routeData[routeId]?.stops || []).filter(item =>
+                item.routeIndex > currentIndex && item.routeIndex < stop.routeIndex
+            );
+            const dwellSeconds = intermediateStops.reduce((sum, item) => sum + stopDwellSeconds(item), 0) + num(bus.dwellRemaining);
+            const baseTravelSeconds = distanceAlongRoute / Math.max(2.5, baseSpeed);
+            const trafficTravelSeconds = baseTravelSeconds * multiplier;
+            const etaSeconds = trafficTravelSeconds + dwellSeconds;
+            const delayMinutes = Math.max(0, Math.round((trafficTravelSeconds - baseTravelSeconds) / 60));
+            const etaMinutes = Math.max(1, Math.round(etaSeconds / 60));
+
+            return {
+                routeId,
+                busId: bus.busId,
+                etaMinutes,
+                etaLabel: `${etaMinutes} min`,
+                delayMinutes,
+                status: role === "SUPPORT" ? "SUPPORT" : delayMinutes > 0 ? "DELAYED" : "ON TIME",
+                role,
+                passengers: num(bus.passengerCount),
+                trafficLevel: bus.trafficLevel || "LOW",
+                note: currentSpeed <= 1 ? "estimated" : ""
+            };
+        }
+
+        function arrivalsForStop(clickedStop, clickedRouteId) {
+            const cluster = stopCluster(clickedStop, clickedRouteId);
+            const byRoute = {};
+
+            cluster.forEach(({ routeId, stop }) => {
+                if (!byRoute[routeId]) byRoute[routeId] = { stop, arrivals: [], affected: null };
+
+                if (route57StopAffectedByScenario(routeId, stop)) {
+                    byRoute[routeId].affected = {
+                        reason: SCENARIOS[selectedScenarioId]?.title || "Route_57 scenario active",
+                        replacementDistance: nearestAlternativeDistanceForStop(stop)
+                    };
+                    return;
+                }
+
+                latestBuses
+                    .filter(bus => normalizeRouteId(bus.routeId) === routeId)
+                    .forEach(bus => {
+                        const arrival = estimateArrival(bus, routeId, stop);
+                        if (arrival) byRoute[routeId].arrivals.push(arrival);
+                    });
+
+                byRoute[routeId].arrivals.sort((a, b) => a.etaMinutes - b.etaMinutes);
+                byRoute[routeId].arrivals = byRoute[routeId].arrivals.slice(0, 4);
+            });
+
+            return byRoute;
+        }
+
+        function etaBadgeClass(status) {
+            const normalized = String(status || "").toUpperCase();
+            if (normalized === "SUPPORT") return "support";
+            if (normalized === "DELAYED") return "delayed";
+            if (normalized === "REROUTED") return "rerouted";
+            if (normalized === "ARRIVING") return "arriving";
+            return "";
+        }
+
+        function buildStopEtaPopup(stop, routeId) {
+            const groups = arrivalsForStop(stop, routeId);
+            const servedRoutes = Object.keys(groups);
+            const rows = servedRoutes.map(currentRouteId => {
+                const group = groups[currentRouteId];
+                const routeColor = getRouteColor(currentRouteId);
+
+                if (group.affected) {
+                    const distance = group.affected.replacementDistance;
+                    return `
+                        <div class="eta-route-group">
+                            <div class="eta-route-title"><span style="color:${routeColor}">${escapeHtml(currentRouteId)}</span><span class="eta-badge rerouted">REROUTED</span></div>
+                            <div class="eta-row">
+                                <div>
+                                    <b>Service affected</b>
+                                    <div class="eta-meta">${escapeHtml(group.affected.reason)}</div>
+                                    <div class="eta-meta">Replacement stop: ${distance == null ? "ETA unavailable" : `${distance} m`}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (!group.arrivals.length) {
+                    return `
+                        <div class="eta-route-group">
+                            <div class="eta-route-title"><span style="color:${routeColor}">${escapeHtml(currentRouteId)}</span><span class="eta-badge delayed">EST.</span></div>
+                            <div class="eta-meta">No active bus approaching.</div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="eta-route-group">
+                        <div class="eta-route-title"><span style="color:${routeColor}">${escapeHtml(currentRouteId)}</span></div>
+                        ${group.arrivals.map(arrival => `
+                            <div class="eta-row">
+                                <div>
+                                    <b>${escapeHtml(arrival.busId)}</b>
+                                    <div class="eta-meta">${arrival.role === "SUPPORT" ? "support bus · " : ""}${escapeHtml(arrival.trafficLevel)} traffic${arrival.delayMinutes ? ` · +${arrival.delayMinutes} min delay` : ""}${arrival.note ? ` · ${escapeHtml(arrival.note)}` : ""}</div>
+                                </div>
+                                <span class="eta-badge ${etaBadgeClass(arrival.status)}">${escapeHtml(arrival.etaLabel)}</span>
+                            </div>
+                        `).join("")}
+                    </div>
+                `;
+            }).join("");
+
+            return `
+                <div class="eta-popup">
+                    <div class="eta-stop-title">${escapeHtml(stop.name)}</div>
+                    <div class="eta-routes">Served routes: ${servedRoutes.length ? servedRoutes.map(escapeHtml).join(", ") : escapeHtml(routeId)}</div>
+                    ${rows || `<div class="eta-meta">No active bus approaching.</div>`}
+                </div>
+            `;
         }
 
         function clearTrafficSections() {

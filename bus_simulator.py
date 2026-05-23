@@ -2382,6 +2382,7 @@ def start_support_pickup_at_target(bus, stop):
         load_level="HIGH"
     )
     bus["currentStopName"] = stop["name"]
+    bus["currentStopSequence"] = int(stop["stopSequence"])
     bus["lastBoarding"] = boarding
     bus["lastAlighting"] = 0
     bus["lastWaiting"] = queue_after
@@ -2538,6 +2539,7 @@ def start_support_residual_service_dwell(
         load_level=load_level
     )
     bus["currentStopName"] = stop["name"]
+    bus["currentStopSequence"] = int(stop["stopSequence"])
     bus["lastBoarding"] = boarding
     bus["lastAlighting"] = alighting
     bus["lastWaiting"] = route_queue_left
@@ -2641,6 +2643,7 @@ def start_dwell_at_stop(bus, stop, route_row, route_index: int, allow_support_di
         load_level=load_level
     )
     bus["currentStopName"] = stop["name"]
+    bus["currentStopSequence"] = int(stop["stopSequence"])
     bus["lastBoarding"] = boarding
     bus["lastAlighting"] = alighting
     bus["lastWaiting"] = route_queue_left
@@ -2677,6 +2680,7 @@ def reset_stop_state_if_needed(bus):
             bus["state"] = STATE_IN_SERVICE
 
         bus["currentStopName"] = None
+        bus["currentStopSequence"] = None
         bus["lastBoarding"] = 0
         bus["lastAlighting"] = 0
         bus["lastWaiting"] = 0
@@ -2785,6 +2789,19 @@ def apply_rerouting_telemetry_fields(telemetry: dict, bus: dict, route_context: 
         "savedMinutes": decision.get("savedMinutes"),
         "reroutingRecommendation": decision,
         "scenarioState": scenario_context.get("state", "INACTIVE")
+    })
+    return telemetry
+
+
+def apply_route_progress_telemetry_fields(telemetry: dict, bus: dict, route_index: int) -> dict:
+    telemetry.update({
+        "currentRouteIndex": int(route_index),
+        "routeProgressIndex": int(route_index),
+        "nextStopIndex": int(bus.get("nextStopIndex", 0)),
+        "currentStopSequence": bus.get("currentStopSequence"),
+        "routeContextId": bus.get("routeContextId") or bus.get("routeId"),
+        "isRerouting": bool(bus.get("reroutingActive", False)),
+        "reroutingActive": bool(bus.get("reroutingActive", False))
     })
     return telemetry
 
@@ -3046,6 +3063,7 @@ def build_stop_telemetry(route_row, bus, route_index: int, route_context=None):
         "originReserveName": bus.get("originReserveName"),
         "dynamicReserve": bus.get("dynamicReserve")
     }
+    telemetry = apply_route_progress_telemetry_fields(telemetry, bus, route_index)
     telemetry = apply_support_decision_telemetry_fields(telemetry, bus)
     return apply_rerouting_telemetry_fields(telemetry, bus, route_context)
 
@@ -3105,6 +3123,7 @@ def build_moving_telemetry(route_row, bus, route_index: int, route_df=None, rout
         "dynamicReserve": bus.get("dynamicReserve"),
         "reroutingRecommendation": rerouting_recommendation
     }
+    telemetry = apply_route_progress_telemetry_fields(telemetry, bus, route_index)
     telemetry = apply_support_decision_telemetry_fields(telemetry, bus)
     return apply_rerouting_telemetry_fields(telemetry, bus, route_context)
 
