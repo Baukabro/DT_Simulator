@@ -1099,13 +1099,28 @@
 
                 const fullLayer = L.layerGroup();
                 if (route.showFullRoute && data.shape?.length > 1) {
-                    L.polyline(data.shape.map(point => [point.latitude, point.longitude]), {
-                        color: route.color,
-                        weight: 4,
-                        opacity: 0.55,
-                        lineCap: "round",
-                        lineJoin: "round"
-                    }).addTo(fullLayer);
+                    const scenarioBus = route.id === "Route_57" ? activeScenarioBus() : null;
+                    const hasBlockedSegment = scenarioBus && isScenarioVisible(scenarioBus);
+                    const blockedStart = hasBlockedSegment ? Math.max(0, Math.floor(num(scenarioBus.affectedSegmentStartIndex, -1))) : -1;
+                    const blockedEnd = hasBlockedSegment ? Math.min(data.shape.length - 1, Math.floor(num(scenarioBus.affectedSegmentEndIndex, -1))) : -1;
+                    const drawSegment = points => {
+                        if (points.length <= 1) return;
+                        L.polyline(points.map(point => [point.latitude, point.longitude]), {
+                            color: route.color,
+                            weight: 4,
+                            opacity: hasBlockedSegment ? 0.32 : 0.55,
+                            lineCap: "round",
+                            lineJoin: "round"
+                        }).addTo(fullLayer);
+                    };
+
+                    if (hasBlockedSegment && blockedStart >= 0 && blockedEnd > blockedStart) {
+                        drawSegment(data.shape.slice(0, blockedStart + 1));
+                        drawSegment(data.shape.slice(blockedEnd));
+                    } else {
+                        drawSegment(data.shape);
+                    }
+
                     fullLayer.addTo(map);
                 }
                 fullRouteLayers[route.id] = fullLayer;
@@ -1183,6 +1198,14 @@
 
                 const start = Math.max(0, index - 4);
                 const end = Math.min(shape.length - 1, index + 8);
+                const scenarioBus = routeId === "Route_57" ? activeScenarioBus() : null;
+                if (scenarioBus && isScenarioVisible(scenarioBus)) {
+                    const blockedStart = Math.floor(num(scenarioBus.affectedSegmentStartIndex, -1));
+                    const blockedEnd = Math.floor(num(scenarioBus.affectedSegmentEndIndex, -1));
+                    const overlapsBlocked = blockedStart >= 0 && blockedEnd >= blockedStart && start <= blockedEnd && end >= blockedStart;
+                    if (overlapsBlocked) return;
+                }
+
                 const color = isSupportBus(bus) ? "#1a9c62" : getTrafficColor(bus.trafficLevel);
                 const section = shape.slice(start, end + 1).map(point => [point.latitude, point.longitude]);
 
@@ -1312,7 +1335,7 @@
             const byRoute = aggregateRoutes();
 
             container.innerHTML = Object.values(ROUTES).map(route => {
-                const stats = byRoute[route.id] || { buses: [], avgLoad: 0, status: "Standby", statusClass: "", interval: "Standby" };
+                const stats = byRoute[route.id] || { buses: [], ordinaryCount: 0, supportCount: 0, avgLoad: 0, status: "Standby", statusClass: "", interval: "Standby" };
                 const data = routeData[route.id] || {};
                 const traffic = stats.status;
                 return `
@@ -1325,7 +1348,8 @@
                             <span class="route-status ${stats.statusClass}">${escapeHtml(traffic)}</span>
                         </div>
                         <div class="route-stats">
-                            <div class="mini-stat"><span>Buses</span><b>${stats.buses.length}</b></div>
+                            <div class="mini-stat"><span>Ordinary</span><b>${stats.ordinaryCount}</b></div>
+                            <div class="mini-stat"><span>Support</span><b>${stats.supportCount}</b></div>
                             <div class="mini-stat"><span>Avg load</span><b>${stats.avgLoad}%</b></div>
                             <div class="mini-stat"><span>Interval</span><b>${escapeHtml(stats.interval)}</b></div>
                             <div class="mini-stat"><span>Stops</span><b>${data.stops?.length || 0}</b></div>
@@ -1358,13 +1382,23 @@
         function aggregateRoutes() {
             const result = {};
             Object.keys(ROUTES).forEach(routeId => {
-                result[routeId] = { buses: [], avgLoad: 0, status: "Standby", statusClass: "", interval: "Standby" };
+                result[routeId] = {
+                    buses: [],
+                    ordinaryCount: 0,
+                    supportCount: 0,
+                    avgLoad: 0,
+                    status: "Standby",
+                    statusClass: "",
+                    interval: "Standby"
+                };
             });
 
             latestBuses.forEach(bus => {
                 const routeId = normalizeRouteId(bus.routeId);
                 if (!result[routeId]) return;
                 result[routeId].buses.push(bus);
+                if (isSupportBus(bus)) result[routeId].supportCount += 1;
+                else result[routeId].ordinaryCount += 1;
             });
 
             Object.entries(result).forEach(([routeId, stats]) => {
@@ -1566,8 +1600,9 @@
                     pill: "ACTION",
                     className: "warn",
                     rows: [
-                        ["Trigger", "capacity full + unserved queue"],
+                        ["Trigger", bus.supportReason || "capacity full + unserved queue"],
                         ["Queue after support", queue],
+                        ["Next regular bus", bus.nextRegularBusId ? `${bus.nextRegularBusId} · ${num(bus.nextRegularBusEtaMinutes).toFixed(1)} min` : "not close"],
                         ["Support ETA", "Operational standby"]
                     ]
                 };
@@ -1575,12 +1610,13 @@
 
             if (bus.supportDecision === "MONITOR_QUEUE" || queue > 0) {
                 return {
-                    title: "Monitor queue",
+                    title: bus.supportDecision === "WAIT_FOR_NEXT_BUS" ? "Wait for next bus" : "Monitor queue",
                     pill: "WATCH",
                     className: "warn",
                     rows: [
-                        ["Trigger", "waiting passengers"],
+                        ["Trigger", bus.supportReason || "waiting passengers"],
                         ["Unserved queue", queue],
+                        ["Next regular bus", bus.nextRegularBusId ? `${bus.nextRegularBusId} · ${num(bus.nextRegularBusEtaMinutes).toFixed(1)} min` : "not available"],
                         ["Support ETA", "Standby"]
                     ]
                 };
@@ -1635,6 +1671,13 @@
                         title: "Support bus recommendation",
                         meta: `${normalizeRouteId(bus.routeId)} · Unserved queue ${num(bus.waitingPassengers)} at ${bus.currentStopName || "current stop"}`,
                         action: "Dispatch support bus"
+                    });
+                } else if (bus.supportDecision === "WAIT_FOR_NEXT_BUS") {
+                    alerts.push({
+                        level: "info",
+                        title: "Wait for next regular bus",
+                        meta: `${normalizeRouteId(bus.routeId)} · ${bus.nextRegularBusId || "Next bus"} ETA ${num(bus.nextRegularBusEtaMinutes).toFixed(1)} min`,
+                        action: "Monitor queue"
                     });
                 } else if (isSupportBus(bus)) {
                     alerts.push({
