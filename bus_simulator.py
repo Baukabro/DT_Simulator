@@ -213,6 +213,11 @@ STATE_CONTINUING_ROUTE_AFTER_PICKUP = "CONTINUING_ROUTE_AFTER_PICKUP"
 STATE_REROUTING_ACTIVE = "REROUTING_ACTIVE"
 STATE_COMPLETED_ROUTE = "COMPLETED_ROUTE"
 
+SUPPORT_ASSIGNMENT_EN_ROUTE = "EN_ROUTE"
+SUPPORT_ASSIGNMENT_BOARDING_QUEUE = "BOARDING_QUEUE"
+SUPPORT_ASSIGNMENT_CONTINUING_SERVICE = "CONTINUING_SERVICE"
+SUPPORT_ASSIGNMENT_RESOLVED = "RESOLVED"
+
 
 # ==================================================
 # ROUTE CONFIGURATION
@@ -522,8 +527,8 @@ NO_REROUTE_SCENARIO_ID = "NONE"
 
 
 # ==================================================
-# ONLY ONE MAIN BUS FOR NOW
-# Support buses will be added later by decision logic.
+# BASELINE BUS LIST
+# Scheduled ordinary buses are added per route by apply_dispatch_schedule().
 # ==================================================
 BUSES = [
     {
@@ -562,6 +567,9 @@ UNSERVED_QUEUES_BY_STOP = {}
 # Stops for which a support bus has already been dispatched.
 DISPATCHED_SUPPORT_STOPS = set()
 
+# Key: parentRouteId + stopSequence, value: current support intervention state.
+SUPPORT_ASSIGNMENTS = {}
+
 SUPPORT_BUS_COUNTER = 0
 
 # Filled in main() after route_57_shape.csv is loaded.
@@ -585,6 +593,7 @@ def activate_route_context(route_context: dict):
     global SUPPORT_RESERVE_POINTS
     global UNSERVED_QUEUES_BY_STOP
     global DISPATCHED_SUPPORT_STOPS
+    global SUPPORT_ASSIGNMENTS
 
     route_config = route_context["config"]
     route_state = route_context["state"]
@@ -596,6 +605,7 @@ def activate_route_context(route_context: dict):
     SUPPORT_RESERVE_POINTS = route_state.setdefault("support_reserve_points", [])
     UNSERVED_QUEUES_BY_STOP = route_state.setdefault("unserved_queues", {})
     DISPATCHED_SUPPORT_STOPS = route_state.setdefault("dispatched_support_stops", set())
+    SUPPORT_ASSIGNMENTS = route_state.setdefault("support_assignments", {})
 
 
 def get_route_context_for_bus(bus):
@@ -1262,6 +1272,7 @@ def map_stops_to_route(route_df: pd.DataFrame, stops_df: pd.DataFrame):
         mapped_stop["stopIndex"] = stop_index
         mapped_stop["isFirstStop"] = stop_index == 0
         mapped_stop["isFinalStop"] = stop_index == len(mapped_stops) - 1
+        mapped_stop["isTerminalTaper"] = stop_index >= max(0, len(mapped_stops) - 3)
 
     print("\nStops mapped to route:")
     for stop in mapped_stops:
@@ -1494,6 +1505,8 @@ def build_route57_scenario_context(route_context: dict, scenario_id: str = None)
         "state": "INACTIVE",
         "activated": False,
         "completed": False,
+        "activeBusIds": set(),
+        "completedBusIds": set(),
         "altShape": alt_shape_df,
         "altStops": alt_stops_df,
         "affectedStartRouteIndex": affected_start,
@@ -1616,6 +1629,158 @@ def activate_bus_if_ready(bus, simulation_second: int) -> bool:
 # ==================================================
 def get_stop_key(stop) -> int:
     return int(stop["stopSequence"])
+
+
+def normalize_parent_route_id(route_id: str) -> str:
+    return str(route_id or "").replace("_SUPPORT", "")
+
+
+def get_support_assignment_key(stop, parent_route_id: str = None) -> str:
+    route_id = normalize_parent_route_id(parent_route_id or ACTIVE_ROUTE_ID)
+    return f"{route_id}:{get_stop_key(stop)}"
+
+
+def is_terminal_taper_stop(stop) -> bool:
+    return bool(stop.get("isFinalStop") or stop.get("isTerminalTaper"))
+
+
+def support_free_space(bus) -> int:
+    return max(0, int(bus.get("capacity", SUPPORT_BUS_CAPACITY)) - int(bus.get("passengerCount", 0)))
+
+
+def get_support_nearby_gap_points() -> int:
+    rule_gap = get_support_rule("reuse_max_gap_points", SUPPORT_REUSE_MAX_GAP_POINTS)
+    if rule_gap is not None:
+        return int(rule_gap)
+    return max(SUPPORT_DYNAMIC_LOOKBACK_POINTS, SUPPORT_MIN_UPSTREAM_GAP_POINTS)
+
+
+def support_assignment_status(assignment: dict) -> str:
+    return str((assignment or {}).get("status") or (assignment or {}).get("state") or "")
+
+
+def support_can_cover_queue(bus, queue_count: int, trigger_queue: int) -> bool:
+    free_space = support_free_space(bus)
+    return free_space >= max(1, min(int(queue_count), int(trigger_queue)))
+
+
+def support_is_completed(bus) -> bool:
+    return (
+        not bus.get("active", True)
+        or bus.get("state") == STATE_COMPLETED_ROUTE
+        or support_free_space(bus) <= 0
+    )
+
+
+def support_route_gap_to_stop(bus, stop) -> int:
+    return int(stop["routeIndex"]) - int(bus.get("current_index", 0))
+
+
+def public_support_decision(decision: dict) -> dict:
+    if not isinstance(decision, dict):
+        return {}
+    return {
+        key: value
+        for key, value in decision.items()
+        if not str(key).startswith("_")
+    }
+
+
+def active_support_assignment_for_stop(stop) -> dict:
+    assignment = SUPPORT_ASSIGNMENTS.get(get_support_assignment_key(stop))
+    if not assignment:
+        return None
+    if support_assignment_status(assignment) == SUPPORT_ASSIGNMENT_RESOLVED:
+        return None
+    return assignment
+
+
+def set_support_assignment(stop, support_bus, state: str, queue_count: int = None, reason: str = "") -> dict:
+    key = get_support_assignment_key(stop)
+    assignment = SUPPORT_ASSIGNMENTS.get(key, {})
+    now = int(CURRENT_SIMULATION_SECOND)
+    queue_remaining = int(UNSERVED_QUEUES_BY_STOP.get(get_stop_key(stop), 0))
+    queue_before = int(queue_count if queue_count is not None else queue_remaining)
+    assignment.update({
+        "supportAssignmentKey": key,
+        "assignmentKey": key,
+        "parentRouteId": ACTIVE_ROUTE_ID,
+        "stopSequence": int(stop["stopSequence"]),
+        "stopName": stop["name"],
+        "stopRouteIndex": int(stop["routeIndex"]),
+        "supportBusId": support_bus.get("busId") if support_bus else assignment.get("supportBusId"),
+        "state": state,
+        "status": state,
+        "queueBefore": int(assignment.get("queueBefore", queue_before) if assignment else queue_before),
+        "queueRemaining": queue_remaining,
+        "queueCount": queue_remaining,
+        "createdAtSimulationSecond": int(assignment.get("createdAtSimulationSecond", now) if assignment else now),
+        "updatedAtSimulationSecond": now,
+        "resolvedAtSimulationSecond": now if state == SUPPORT_ASSIGNMENT_RESOLVED else None,
+        "reason": reason
+    })
+    SUPPORT_ASSIGNMENTS[key] = assignment
+
+    if support_bus is not None:
+        support_bus["supportAssignmentKey"] = key
+        support_bus["supportAssignmentState"] = state
+        support_bus["supportAssignmentStatus"] = state
+        support_bus["assignedQueueStopSequence"] = int(stop["stopSequence"])
+        support_bus["assignedSupportStopName"] = stop["name"]
+
+    if state != SUPPORT_ASSIGNMENT_RESOLVED:
+        DISPATCHED_SUPPORT_STOPS.add(get_stop_key(stop))
+    else:
+        DISPATCHED_SUPPORT_STOPS.discard(get_stop_key(stop))
+
+    return assignment
+
+
+def update_support_assignment_for_bus(bus, state: str, stop=None, queue_count: int = None, reason: str = ""):
+    key = bus.get("supportAssignmentKey")
+
+    if stop is not None:
+        return set_support_assignment(stop, bus, state, queue_count=queue_count, reason=reason)
+
+    if not key or key not in SUPPORT_ASSIGNMENTS:
+        return None
+
+    assignment = SUPPORT_ASSIGNMENTS[key]
+    if assignment.get("supportBusId") and assignment.get("supportBusId") != bus.get("busId"):
+        return None
+
+    assignment.update({
+        "state": state,
+        "status": state,
+        "queueRemaining": int(queue_count if queue_count is not None else assignment.get("queueRemaining", assignment.get("queueCount", 0))),
+        "queueCount": int(queue_count if queue_count is not None else assignment.get("queueRemaining", assignment.get("queueCount", 0))),
+        "updatedAtSimulationSecond": int(CURRENT_SIMULATION_SECOND),
+        "resolvedAtSimulationSecond": int(CURRENT_SIMULATION_SECOND) if state == SUPPORT_ASSIGNMENT_RESOLVED else None,
+        "reason": reason
+    })
+    bus["supportAssignmentState"] = state
+    bus["supportAssignmentStatus"] = state
+
+    if state == SUPPORT_ASSIGNMENT_RESOLVED:
+        DISPATCHED_SUPPORT_STOPS.discard(int(assignment.get("stopSequence", 0)))
+
+    return assignment
+
+
+def resolve_support_assignment_for_bus(bus, reason: str = ""):
+    return update_support_assignment_for_bus(
+        bus,
+        SUPPORT_ASSIGNMENT_RESOLVED,
+        queue_count=0,
+        reason=reason
+    )
+
+
+def find_bus_by_id(bus_id: str):
+    for bus in BUSES:
+        if str(bus.get("busId")) == str(bus_id):
+            return bus
+    return None
 
 
 def get_next_stop(bus, stops):
@@ -2034,61 +2199,292 @@ def describe_support_origin(reserve_point: dict, target_index: int) -> str:
     )
 
 
-def find_reusable_support_bus_for_stop(stop):
-    """
-    Reuse an existing Support bus instead of spawning a new one.
-
-    Rules:
-    - support bus must be active;
-    - support bus must already have completed its first rescue pickup
-      and be continuing the route;
-    - support bus must still be upstream of the new problem stop;
-    - support bus must have available capacity.
-    """
+def estimate_support_bus_to_stop(bus, stop) -> dict:
     target_route_index = int(stop["routeIndex"])
+    current_index = int(bus.get("current_index", 0))
+
+    if bus.get("state") == STATE_WAITING_TO_START:
+        current_index = 0
+
+    if current_index > target_route_index:
+        return {
+            "busId": bus.get("busId"),
+            "etaSeconds": None,
+            "etaMinutes": None,
+            "routeIndex": current_index,
+            "isUpstream": False
+        }
+
+    eta_seconds = max(0, target_route_index - current_index) * PUBLISH_INTERVAL_SECONDS
+    return {
+        "busId": bus.get("busId"),
+        "etaSeconds": int(eta_seconds),
+        "etaMinutes": round(eta_seconds / 60, 1),
+        "routeIndex": current_index,
+        "isUpstream": True
+    }
+
+
+def active_support_buses_for_route() -> list:
+    return [
+        bus
+        for bus in BUSES
+        if bus.get("busRole") == "SUPPORT"
+        and bus.get("active", True)
+        and normalize_parent_route_id(bus.get("routeContextId") or bus.get("routeId")) == ACTIVE_ROUTE_ID
+    ]
+
+
+def make_existing_support_decision(
+    bus,
+    stop,
+    decision: str,
+    action: str,
+    reason: str,
+    assignment_state: str = None,
+    eta: dict = None
+) -> dict:
+    eta = eta or estimate_support_bus_to_stop(bus, stop)
+    assignment_state = assignment_state or bus.get("supportAssignmentStatus") or bus.get("supportAssignmentState")
+    return {
+        "supportDecision": decision,
+        "supportAction": action,
+        "supportReason": reason,
+        "supportRecommended": False,
+        "supportBusId": bus.get("busId"),
+        "assignedSupportBusId": bus.get("busId"),
+        "supportEtaSeconds": eta.get("etaSeconds"),
+        "supportEtaMinutes": eta.get("etaMinutes"),
+        "supportAssignmentKey": bus.get("supportAssignmentKey") or get_support_assignment_key(stop),
+        "supportAssignmentState": assignment_state,
+        "supportAssignmentStatus": assignment_state,
+        "_supportBus": bus
+    }
+
+
+def support_bus_same_queue(bus, stop) -> bool:
+    stop_sequence = int(stop["stopSequence"])
+    assignment_key = get_support_assignment_key(stop)
+
+    same_target = (
+        bus.get("targetStopSequence") is not None
+        and int(bus.get("targetStopSequence")) == stop_sequence
+    )
+    same_assigned = (
+        bus.get("assignedQueueStopSequence") is not None
+        and int(bus.get("assignedQueueStopSequence")) == stop_sequence
+    )
+    same_assignment_key = str(bus.get("supportAssignmentKey") or "") == assignment_key
+
+    return same_target or same_assigned or same_assignment_key
+
+
+def build_existing_support_decision(stop, queue_count: int) -> dict:
+    assignment = active_support_assignment_for_stop(stop)
+    trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
+    severe_queue_threshold = int(get_support_rule("severe_queue_threshold", max(8, trigger_queue + 2)))
+    nearby_gap_points = get_support_nearby_gap_points()
+
+    if assignment:
+        support_bus = find_bus_by_id(assignment.get("supportBusId"))
+        if support_bus is None or not support_bus.get("active", True) or support_bus.get("state") == STATE_COMPLETED_ROUTE:
+            assignment["state"] = SUPPORT_ASSIGNMENT_RESOLVED
+            assignment["status"] = SUPPORT_ASSIGNMENT_RESOLVED
+            assignment["resolvedAtSimulationSecond"] = int(CURRENT_SIMULATION_SECOND)
+            DISPATCHED_SUPPORT_STOPS.discard(int(assignment.get("stopSequence", 0)))
+        else:
+            eta = estimate_support_bus_to_stop(support_bus, stop)
+            state = support_assignment_status(assignment) or SUPPORT_ASSIGNMENT_EN_ROUTE
+            decision = "SUPPORT_ALREADY_ASSIGNED"
+            action = "Use existing support bus"
+            reason = f"{assignment.get('supportBusId', 'Support bus')} is already assigned to this queue."
+
+            # Escalation is allowed only after the assigned support is full and the queue is severe.
+            if queue_count >= severe_queue_threshold and support_free_space(support_bus) <= 0:
+                return None
+
+            if state == SUPPORT_ASSIGNMENT_EN_ROUTE or support_bus.get("state") == STATE_EN_ROUTE_TO_UNSERVED_QUEUE:
+                decision = "SUPPORT_EN_ROUTE"
+                action = "Support en route"
+                reason = f"{support_bus['busId']} is already en route and has capacity for this queue."
+            elif state == SUPPORT_ASSIGNMENT_BOARDING_QUEUE or support_bus.get("state") == STATE_BOARDING_UNSERVED_QUEUE:
+                decision = "SUPPORT_OPERATING"
+                action = "Support already boarding queue"
+                reason = f"{support_bus['busId']} is already boarding this queue."
+            elif state == SUPPORT_ASSIGNMENT_CONTINUING_SERVICE:
+                decision = "SUPPORT_OPERATING"
+                action = "Support operating"
+                reason = f"{support_bus['busId']} is already continuing service after this queue."
+
+            return make_existing_support_decision(
+                support_bus,
+                stop,
+                decision,
+                action,
+                reason,
+                assignment_state=state,
+                eta=eta
+            )
+
     candidates = []
 
-    for bus in BUSES:
-        if bus.get("busRole") != "SUPPORT":
+    for bus in active_support_buses_for_route():
+        if support_is_completed(bus):
             continue
 
-        if bus.get("routeContextId") != ACTIVE_ROUTE_ID:
-            continue
-
-        if not bus.get("active", True):
-            continue
-
-        if bus.get("state") != STATE_CONTINUING_ROUTE_AFTER_PICKUP:
-            continue
-
+        state = bus.get("state")
+        free_space = support_free_space(bus)
+        eta = estimate_support_bus_to_stop(bus, stop)
         current_index = int(bus.get("current_index", 0))
+        target_index = int(stop["routeIndex"])
+        gap_to_stop = target_index - current_index
+        abs_gap_to_stop = abs(gap_to_stop)
+        is_upstream = gap_to_stop >= 0
+        is_near_stop = abs_gap_to_stop <= nearby_gap_points
+        bus_target_index = bus.get("targetRouteIndex")
+        target_gap = abs(int(bus_target_index) - target_index) if bus_target_index is not None else None
+        same_or_near_assigned_queue = (
+            support_bus_same_queue(bus, stop)
+            or (target_gap is not None and target_gap <= nearby_gap_points)
+        )
 
-        if current_index > target_route_index:
+        if same_or_near_assigned_queue:
+            if queue_count >= severe_queue_threshold and free_space <= 0:
+                continue
+
+            if state == STATE_EN_ROUTE_TO_UNSERVED_QUEUE:
+                return make_existing_support_decision(
+                    bus,
+                    stop,
+                    "SUPPORT_EN_ROUTE",
+                    "Support en route",
+                    f"{bus['busId']} is already en route to this queue or a nearby queue.",
+                    assignment_state=bus.get("supportAssignmentStatus") or SUPPORT_ASSIGNMENT_EN_ROUTE,
+                    eta=eta
+                )
+
+            if state == STATE_BOARDING_UNSERVED_QUEUE:
+                return make_existing_support_decision(
+                    bus,
+                    stop,
+                    "SUPPORT_OPERATING",
+                    "Support already boarding queue",
+                    f"{bus['busId']} is already boarding this queue or a nearby queue.",
+                    assignment_state=bus.get("supportAssignmentStatus") or SUPPORT_ASSIGNMENT_BOARDING_QUEUE,
+                    eta=eta
+                )
+
+            if state in {STATE_CONTINUING_ROUTE_AFTER_PICKUP, STATE_STOPPING_AT_STOP, STATE_IN_SERVICE}:
+                return make_existing_support_decision(
+                    bus,
+                    stop,
+                    "SUPPORT_OPERATING",
+                    "Support operating",
+                    f"{bus['busId']} is already operating near this queue.",
+                    assignment_state=bus.get("supportAssignmentStatus") or SUPPORT_ASSIGNMENT_CONTINUING_SERVICE,
+                    eta=eta
+                )
+
+        same_current_stop = (
+            bus.get("currentStopName")
+            and stop_name_matches(str(bus.get("currentStopName")), str(stop.get("name", "")))
+        )
+
+        if same_current_stop and state in {STATE_BOARDING_UNSERVED_QUEUE, STATE_CONTINUING_ROUTE_AFTER_PICKUP, STATE_STOPPING_AT_STOP}:
+            return make_existing_support_decision(
+                bus,
+                stop,
+                "SUPPORT_OPERATING",
+                "Support operating",
+                f"{bus['busId']} is boarding/dwelling at this stop and has capacity.",
+                assignment_state=bus.get("supportAssignmentStatus") or SUPPORT_ASSIGNMENT_BOARDING_QUEUE,
+                eta={"etaSeconds": 0, "etaMinutes": 0}
+            )
+
+        if not support_can_cover_queue(bus, queue_count, trigger_queue):
             continue
 
-        max_gap_points = get_support_rule("reuse_max_gap_points", SUPPORT_REUSE_MAX_GAP_POINTS)
-
-        if max_gap_points is not None and (target_route_index - current_index) > int(max_gap_points):
+        if not (is_upstream or is_near_stop):
             continue
 
-        trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
-        free_space = int(bus.get("capacity", SUPPORT_BUS_CAPACITY)) - int(bus.get("passengerCount", 0))
+        if state == STATE_EN_ROUTE_TO_UNSERVED_QUEUE:
+            return make_existing_support_decision(
+                bus,
+                stop,
+                "SUPPORT_EN_ROUTE",
+                "Support en route",
+                f"{bus['busId']} is already en route nearby and has {free_space} free seats.",
+                assignment_state=bus.get("supportAssignmentStatus") or SUPPORT_ASSIGNMENT_EN_ROUTE,
+                eta=eta
+            )
 
-        if free_space < trigger_queue:
-            continue
-
-        candidates.append((current_index, bus))
+        if state in {STATE_CONTINUING_ROUTE_AFTER_PICKUP, STATE_IN_SERVICE, STATE_STOPPING_AT_STOP}:
+            candidates.append((
+                abs_gap_to_stop,
+                make_existing_support_decision(
+                    bus,
+                    stop,
+                    "REUSE_SUPPORT_BUS",
+                    "Use existing support bus",
+                    f"{bus['busId']} is upstream/nearby and has {free_space} free seats.",
+                    assignment_state=SUPPORT_ASSIGNMENT_EN_ROUTE,
+                    eta=eta
+                )
+            ))
 
     if not candidates:
         return None
 
-    # choose the nearest upstream support bus
-    candidates.sort(key=lambda item: item[0], reverse=True)
+    candidates.sort(key=lambda item: item[0])
+    return candidates[0][1]
+
+
+def find_reusable_support_bus_for_stop(stop):
+    """
+    Reuse an active Support bus instead of spawning another one.
+    This intentionally includes support buses that are en route, boarding,
+    continuing service, or dwelling near/upstream of the queue.
+    """
+    target_route_index = int(stop["routeIndex"])
+    queue_count = int(UNSERVED_QUEUES_BY_STOP.get(get_stop_key(stop), 0))
+    trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
+    nearby_gap_points = get_support_nearby_gap_points()
+    candidates = []
+
+    for bus in active_support_buses_for_route():
+        if support_is_completed(bus):
+            continue
+
+        current_index = int(bus.get("current_index", 0))
+        gap_points = target_route_index - current_index
+
+        if gap_points < 0 and abs(gap_points) > nearby_gap_points:
+            continue
+
+        if not support_can_cover_queue(bus, queue_count, trigger_queue):
+            continue
+
+        state = bus.get("state")
+        if state in {
+            STATE_EN_ROUTE_TO_UNSERVED_QUEUE,
+            STATE_BOARDING_UNSERVED_QUEUE,
+            STATE_CONTINUING_ROUTE_AFTER_PICKUP,
+            STATE_STOPPING_AT_STOP,
+            STATE_IN_SERVICE
+        }:
+            candidates.append((abs(gap_points), bus))
+
+    if not candidates:
+        return None
+
+    # choose the nearest support bus that can physically absorb the queue
+    candidates.sort(key=lambda item: item[0])
     return candidates[0][1]
 
 
 def assign_existing_support_bus_to_stop(support_bus, stop):
     stop_key = get_stop_key(stop)
+    queue_count = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
 
     support_bus["state"] = STATE_EN_ROUTE_TO_UNSERVED_QUEUE
     support_bus["targetStopSequence"] = int(stop["stopSequence"])
@@ -2097,14 +2493,21 @@ def assign_existing_support_bus_to_stop(support_bus, stop):
     support_bus["originDescription"] = "reused active support bus already on route"
     support_bus["originReserveName"] = "Active support bus"
 
-    DISPATCHED_SUPPORT_STOPS.add(stop_key)
+    set_support_assignment(
+        stop,
+        support_bus,
+        SUPPORT_ASSIGNMENT_EN_ROUTE,
+        queue_count=queue_count,
+        reason="reused active support bus"
+    )
 
     print(
-        f"REASSIGN {support_bus['busId']} -> {stop['name']} | "
+        f"SUPPORT REUSED: existing support can handle queue | "
+        f"{support_bus['busId']} -> {stop['name']} | "
         f"current_idx={support_bus['current_index']}, "
         f"target_idx={stop['routeIndex']}, "
         f"passengers={support_bus['passengerCount']}/{support_bus.get('capacity', SUPPORT_BUS_CAPACITY)}, "
-        f"unserved queue={UNSERVED_QUEUES_BY_STOP.get(stop_key, 0)}"
+        f"unserved queue={queue_count}"
     )
 
     return support_bus
@@ -2168,6 +2571,7 @@ def evaluate_support_dispatch_decision(stop, requester_bus=None) -> dict:
     requester_capacity = int((requester_bus or {}).get("capacity", BUS_CAPACITY))
     requester_passengers = int((requester_bus or {}).get("passengerCount", requester_capacity))
     bus_full = requester_passengers >= requester_capacity
+    existing_support_decision = build_existing_support_decision(stop, queue_count)
 
     base = {
         "supportDecision": "NORMAL",
@@ -2178,17 +2582,27 @@ def evaluate_support_dispatch_decision(stop, requester_bus=None) -> dict:
         "nextRegularBusId": next_bus.get("busId"),
         "nextRegularBusEtaSeconds": next_bus.get("etaSeconds"),
         "nextRegularBusEtaMinutes": next_bus.get("etaMinutes"),
-        "supportTriggerQueue": trigger_queue
+        "supportTriggerQueue": trigger_queue,
+        "supportEtaSeconds": None,
+        "supportEtaMinutes": None,
+        "assignedSupportBusId": None,
+        "supportAssignmentKey": get_support_assignment_key(stop),
+        "supportAssignmentState": None,
+        "supportAssignmentStatus": None
     }
 
     if queue_count <= 0:
         return base
 
-    if stop.get("isFinalStop"):
+    if existing_support_decision is not None:
+        base.update(existing_support_decision)
+        return base
+
+    if is_terminal_taper_stop(stop):
         base.update({
             "supportDecision": "MONITOR_QUEUE",
             "supportAction": "Monitor queue",
-            "supportReason": "Queue is at terminal/final section; terminal taper should clear demand."
+            "supportReason": "Queue is at the terminal taper/final section; ordinary service should clear demand."
         })
         return base
 
@@ -2210,6 +2624,14 @@ def evaluate_support_dispatch_decision(stop, requester_bus=None) -> dict:
             "supportDecision": "WAIT_FOR_NEXT_BUS",
             "supportAction": "Wait for next regular bus",
             "supportReason": f"Next regular bus {next_bus['busId']} is close enough."
+        })
+        return base
+
+    if queue_count <= 3:
+        base.update({
+            "supportDecision": "MONITOR_QUEUE",
+            "supportAction": "Monitor queue",
+            "supportReason": "Small unserved queue; monitor before dispatching support."
         })
         return base
 
@@ -2237,10 +2659,26 @@ def evaluate_support_dispatch_decision(stop, requester_bus=None) -> dict:
         })
         return base
 
+    if eta_seconds is not None and eta_seconds <= wait_eta_threshold and queue_count <= 6:
+        base.update({
+            "supportDecision": "WAIT_FOR_NEXT_BUS",
+            "supportAction": "Wait for next regular bus",
+            "supportReason": f"Next regular bus {next_bus['busId']} is within 5 minutes."
+        })
+        return base
+
+    if not bus_full:
+        base.update({
+            "supportDecision": "MONITOR_QUEUE",
+            "supportAction": "Monitor queue",
+            "supportReason": "Support dispatch requires a full requester bus or severe unresolved queue."
+        })
+        return base
+
     base.update({
         "supportDecision": "DISPATCH_SUPPORT_BUS",
         "supportAction": "Dispatch support bus",
-        "supportReason": "Full bus left a critical queue and no regular bus is close enough.",
+        "supportReason": "Full bus left a critical queue and no regular/support bus is close enough.",
         "supportRecommended": True
     })
     return base
@@ -2251,7 +2689,6 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
 
     support_enabled = bool(get_support_rule("enabled", SUPPORT_BUS_ENABLED))
     support_capacity = int(get_support_rule("capacity", SUPPORT_BUS_CAPACITY))
-    support_trigger_queue = int(get_support_rule("trigger_queue", SUPPORT_BUS_TRIGGER_QUEUE))
     max_active_support = int(get_support_rule("max_active_support_buses", MAX_ACTIVE_SUPPORT_BUSES))
     support_route_id = str(get_support_rule("support_route_id", SUPPORT_BUS_ROUTE_ID))
 
@@ -2268,48 +2705,71 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
         requester_role = str(requester_bus.get("busRole", "MAIN"))
         requester_id = str(requester_bus.get("busId", "Bus_1"))
 
-    active_support_count = count_active_support_buses()
+    stop_key = get_stop_key(stop)
+    queue_count = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
+    support_decision = evaluate_support_dispatch_decision(stop, requester_bus=requester_bus)
 
-    # Important rule:
-    # Bus_1 should not spawn many new support buses while support is already active.
-    # First try to reuse an active Support bus that is already on the route and still has capacity.
-    if requester_role != "SUPPORT" and active_support_count >= 1:
-        reusable_support_bus = find_reusable_support_bus_for_stop(stop)
+    if requester_bus is not None:
+        requester_bus["lastSupportDecision"] = public_support_decision(support_decision)
 
+    if support_decision["supportDecision"] == "REUSE_SUPPORT_BUS":
+        reusable_support_bus = support_decision.get("_supportBus") or find_reusable_support_bus_for_stop(stop)
         if reusable_support_bus is not None:
             return assign_existing_support_bus_to_stop(reusable_support_bus, stop)
 
         print(
-            f"SUPPORT REUSE UNAVAILABLE at {stop['name']} | "
-            f"{requester_id} found queue, checking whether another support bus is justified"
+            f"SUPPORT DISPATCH SKIPPED: existing support nearby | "
+            f"{stop['name']} | queue={queue_count}"
         )
+        return None
 
-    # Support buses may request the next support only if they themselves create unserved demand.
-    # Still capped to avoid infinite spawning.
+    if support_decision["supportDecision"] != "DISPATCH_SUPPORT_BUS":
+        decision = support_decision["supportDecision"]
+        action = str(support_decision.get("supportAction", ""))
+        if decision == "SUPPORT_ALREADY_ASSIGNED":
+            print(
+                f"SUPPORT DISPATCH SKIPPED: existing support already assigned to this queue | "
+                f"{stop['name']} | "
+                f"bus={support_decision.get('supportBusId')} | "
+                f"status={support_decision.get('supportAssignmentStatus') or support_decision.get('supportAssignmentState')}"
+            )
+        elif decision == "SUPPORT_EN_ROUTE":
+            print(
+                f"SUPPORT DISPATCH SKIPPED: support already en route | "
+                f"{stop['name']} | "
+                f"bus={support_decision.get('supportBusId')} | "
+                f"eta={support_decision.get('supportEtaMinutes')}"
+            )
+        elif decision == "SUPPORT_OPERATING":
+            if "boarding" in action.lower():
+                print(
+                    f"SUPPORT DISPATCH SKIPPED: support already boarding queue | "
+                    f"{stop['name']} | bus={support_decision.get('supportBusId')}"
+                )
+            else:
+                print(
+                    f"SUPPORT DISPATCH SKIPPED: existing support nearby | "
+                    f"{stop['name']} | bus={support_decision.get('supportBusId')}"
+                )
+        elif decision == "WAIT_FOR_NEXT_BUS":
+            print(
+                f"SUPPORT DISPATCH SKIPPED: next regular bus close | "
+                f"{stop['name']} | queue={queue_count} | "
+                f"next_bus={support_decision.get('nextRegularBusId')} "
+                f"eta={support_decision.get('nextRegularBusEtaMinutes')}"
+            )
+        else:
+            print(
+                f"SUPPORT DISPATCH SKIPPED at {stop['name']} | "
+                f"decision={decision} | queue={queue_count}"
+            )
+        return None
+
+    active_support_count = count_active_support_buses()
     if active_support_count >= max_active_support:
         print(
             f"SUPPORT DISPATCH SKIPPED at {stop['name']} | "
             f"active support bus limit reached ({max_active_support})"
-        )
-        return None
-
-    stop_key = get_stop_key(stop)
-    queue_count = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
-
-    if stop_key in DISPATCHED_SUPPORT_STOPS:
-        return None
-
-    support_decision = evaluate_support_dispatch_decision(stop, requester_bus=requester_bus)
-    if requester_bus is not None:
-        requester_bus["lastSupportDecision"] = support_decision
-
-    if support_decision["supportDecision"] != "DISPATCH_SUPPORT_BUS":
-        print(
-            f"SUPPORT DISPATCH SKIPPED at {stop['name']} | "
-            f"decision={support_decision['supportDecision']} | "
-            f"queue={queue_count} | "
-            f"next_bus={support_decision.get('nextRegularBusId')} "
-            f"eta={support_decision.get('nextRegularBusEtaMinutes')}"
         )
         return None
 
@@ -2349,14 +2809,22 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
         "originRouteIndex": int(support_start_route_index),
         "originDescription": support_origin_description,
         "originReserveName": reserve_point["reserveName"],
-        "dynamicReserve": bool(reserve_point.get("dynamicReserve", False))
+        "dynamicReserve": bool(reserve_point.get("dynamicReserve", False)),
+        "supportAssignmentKey": get_support_assignment_key(stop),
+        "supportAssignmentState": SUPPORT_ASSIGNMENT_EN_ROUTE
     }
 
     BUSES.append(support_bus)
-    DISPATCHED_SUPPORT_STOPS.add(stop_key)
+    set_support_assignment(
+        stop,
+        support_bus,
+        SUPPORT_ASSIGNMENT_EN_ROUTE,
+        queue_count=queue_count,
+        reason=f"dispatched by {requester_id}"
+    )
 
     print(
-        f"DISPATCH {support_bus_id}: {support_origin_description} -> {stop['name']} | "
+        f"SUPPORT DISPATCHED {support_bus_id}: {support_origin_description} -> {stop['name']} | "
         f"requested_by={requester_id}, origin_idx={support_start_route_index}, "
         f"target_idx={target_route_index}, unserved queue={queue_count}"
     )
@@ -2373,6 +2841,13 @@ def start_support_pickup_at_target(bus, stop):
     queue_after = max(0, queue_before - boarding)
 
     UNSERVED_QUEUES_BY_STOP[stop_key] = queue_after
+    set_support_assignment(
+        stop,
+        bus,
+        SUPPORT_ASSIGNMENT_BOARDING_QUEUE,
+        queue_count=queue_before,
+        reason="support bus reached assigned queue"
+    )
 
     bus["passengerCount"] = int(bus["passengerCount"]) + boarding
     bus["dwellRemaining"] = calculate_dwell_ticks(
@@ -2396,6 +2871,14 @@ def start_support_pickup_at_target(bus, stop):
         f"picked +{boarding}, queue before={queue_before}, queue after={queue_after}, "
         f"support passengers={bus['passengerCount']}"
     )
+
+    severe_queue_threshold = int(get_support_rule("severe_queue_threshold", max(8, SUPPORT_BUS_TRIGGER_QUEUE + 2)))
+    if queue_after >= severe_queue_threshold and support_free_space(bus) <= 0:
+        resolve_support_assignment_for_bus(
+            bus,
+            reason="support bus full after pickup; severe queue may need another support"
+        )
+        dispatch_support_bus_if_needed(stop, requester_bus=bus)
 
 
 def is_support_residual_service(bus) -> bool:
@@ -2548,12 +3031,14 @@ def start_support_residual_service_dwell(
     bus["nextStopIndex"] += 1
     bus["state"] = STATE_CONTINUING_ROUTE_AFTER_PICKUP
 
-    # Escalation to Support_2 only if support bus itself is near/full and cannot serve demand.
+    severe_queue_threshold = int(get_support_rule("severe_queue_threshold", max(8, SUPPORT_BUS_TRIGGER_QUEUE + 2)))
+
+    # Escalation to Support_2 only if support itself is full and leaves a severe queue.
     if (
-        route_queue_left > 0
+        route_queue_left >= severe_queue_threshold
         and allow_support_dispatch
         and is_support_critical_stop(stop)
-        and final_passengers >= SUPPORT_HARD_DISPATCH_LOAD
+        and final_passengers >= bus_capacity
     ):
         store_unserved_queue(stop, route_queue_left)
         dispatch_support_bus_if_needed(stop, requester_bus=bus)
@@ -2658,7 +3143,9 @@ def start_dwell_at_stop(bus, stop, route_row, route_index: int, allow_support_di
         set_unserved_queue(stop, 0)
 
     if route_queue_left > 0 and allow_support_dispatch:
-        bus["lastSupportDecision"] = evaluate_support_dispatch_decision(stop, requester_bus=bus)
+        bus["lastSupportDecision"] = public_support_decision(
+            evaluate_support_dispatch_decision(stop, requester_bus=bus)
+        )
         dispatch_support_bus_if_needed(stop, requester_bus=bus)
 
     print(
@@ -2676,6 +3163,14 @@ def reset_stop_state_if_needed(bus):
     if bus["dwellRemaining"] == 0:
         if bus.get("busRole") == "SUPPORT" and bus.get("state") == STATE_BOARDING_UNSERVED_QUEUE:
             bus["state"] = STATE_CONTINUING_ROUTE_AFTER_PICKUP
+            assignment = update_support_assignment_for_bus(
+                bus,
+                SUPPORT_ASSIGNMENT_CONTINUING_SERVICE,
+                queue_count=int(bus.get("lastWaiting", 0)),
+                reason="support pickup completed; bus continues route"
+            )
+            if assignment and int(bus.get("lastWaiting", 0)) <= 0:
+                resolve_support_assignment_for_bus(bus, reason="assigned queue picked up")
         elif bus.get("state") == STATE_STOPPING_AT_STOP:
             bus["state"] = STATE_IN_SERVICE
 
@@ -2694,6 +3189,7 @@ def handle_support_bus_tick(bus, route_df, route_stops):
     current_index = int(bus["current_index"])
 
     if current_index >= len(route_df):
+        resolve_support_assignment_for_bus(bus, reason="support bus completed route")
         bus["active"] = False
         bus["state"] = STATE_COMPLETED_ROUTE
         return None
@@ -2820,8 +3316,13 @@ def apply_support_decision_telemetry_fields(telemetry: dict, bus: dict) -> dict:
             "supportRecommended": False,
             "supportAction": "Support operating",
             "supportRouteId": bus.get("routeId"),
+            "supportBusId": bus.get("busId"),
+            "assignedSupportBusId": bus.get("busId"),
             "supportTargetStopName": bus.get("targetStopName"),
-            "supportOriginDescription": bus.get("originDescription")
+            "supportOriginDescription": bus.get("originDescription"),
+            "supportAssignmentKey": bus.get("supportAssignmentKey"),
+            "supportAssignmentState": bus.get("supportAssignmentState"),
+            "supportAssignmentStatus": bus.get("supportAssignmentStatus") or bus.get("supportAssignmentState")
         })
         return telemetry
 
@@ -2835,6 +3336,13 @@ def apply_support_decision_telemetry_fields(telemetry: dict, bus: dict) -> dict:
             "nextRegularBusId": last_support_decision.get("nextRegularBusId"),
             "nextRegularBusEtaSeconds": last_support_decision.get("nextRegularBusEtaSeconds"),
             "nextRegularBusEtaMinutes": last_support_decision.get("nextRegularBusEtaMinutes"),
+            "supportBusId": last_support_decision.get("supportBusId"),
+            "assignedSupportBusId": last_support_decision.get("assignedSupportBusId") or last_support_decision.get("supportBusId"),
+            "supportEtaSeconds": last_support_decision.get("supportEtaSeconds"),
+            "supportEtaMinutes": last_support_decision.get("supportEtaMinutes"),
+            "supportAssignmentKey": last_support_decision.get("supportAssignmentKey"),
+            "supportAssignmentState": last_support_decision.get("supportAssignmentState"),
+            "supportAssignmentStatus": last_support_decision.get("supportAssignmentStatus") or last_support_decision.get("supportAssignmentState"),
             "supportRouteId": get_support_rule("support_route_id", SUPPORT_BUS_ROUTE_ID)
         })
         return telemetry
@@ -2857,6 +3365,13 @@ def apply_support_decision_telemetry_fields(telemetry: dict, bus: dict) -> dict:
         "nextRegularBusId": None,
         "nextRegularBusEtaSeconds": None,
         "nextRegularBusEtaMinutes": None,
+        "supportBusId": None,
+        "assignedSupportBusId": None,
+        "supportEtaSeconds": None,
+        "supportEtaMinutes": None,
+        "supportAssignmentKey": bus.get("supportAssignmentKey"),
+        "supportAssignmentState": bus.get("supportAssignmentState"),
+        "supportAssignmentStatus": bus.get("supportAssignmentStatus") or bus.get("supportAssignmentState"),
         "supportRouteId": get_support_rule("support_route_id", SUPPORT_BUS_ROUTE_ID)
     })
     return telemetry
@@ -2889,6 +3404,7 @@ def evaluate_rerouting_decision(
         alt_available = not scenario_context.get("altShape", pd.DataFrame()).empty
         expected_delay = int(scenario.get("expectedDelayMinutes", 0))
         route_length = len(route_context.get("route_df", [])) if route_context else 0
+        completed_bus_ids = scenario_context.setdefault("completedBusIds", set())
         incident_ahead = (
             affected_end is not None
             and current_index < int(affected_end)
@@ -2898,15 +3414,15 @@ def evaluate_rerouting_decision(
         approaching_entry = entry_index is not None and current_index >= max(0, int(entry_index) - int(REROUTE_RULES["entry_buffer_points"]))
         saved_minutes = max(0, expected_delay - 2) if alt_available and validation["reroutingAllowed"] else None
 
-        if bus.get("busId") != "Bus_1" or bus.get("routeContextId") != "Route_57":
+        if bus.get("routeContextId") != "Route_57" or bus.get("busRole") != "MAIN":
             decision_type = "NORMAL"
             action = "Monitor"
-            reason = "Rerouting pilot is limited to Route_57 Bus_1."
-        elif state in {"REROUTING_ACTIVE"} or bus.get("reroutingActive"):
+            reason = "Rerouting pilot is limited to ordinary Route_57 buses."
+        elif bus.get("reroutingActive"):
             decision_type = "REROUTING_ACTIVE"
             action = "Use alternative route"
             reason = "Bus is following the alternative corridor."
-        elif state in {"RESOLVED"}:
+        elif bus.get("busId") in completed_bus_ids:
             decision_type = "NORMAL"
             action = "Monitor"
             reason = "Reroute completed; bus returned to normal Route_57."
@@ -3152,6 +3668,7 @@ def build_route_context(route_config: dict):
     route_state = ROUTE_RUNTIME_STATES.setdefault(route_id, {
         "unserved_queues": {},
         "dispatched_support_stops": set(),
+        "support_assignments": {},
         "support_reserve_points": [],
         "route_point_count": 0
     })
@@ -3260,10 +3777,12 @@ def update_route57_scenario_state(bus: dict, route_context: dict, simulation_sec
             route_context["scenario_context"] = build_route57_scenario_context(route_context, requested_scenario_id)
             scenario_context = route_context.get("scenario_context")
 
-    if scenario_context is None or bus.get("busId") != "Bus_1" or bus.get("routeContextId") != "Route_57":
+    if scenario_context is None or bus.get("routeContextId") != "Route_57" or bus.get("busRole") != "MAIN":
         return
 
-    if scenario_context.get("state") == "RESOLVED":
+    completed_bus_ids = scenario_context.setdefault("completedBusIds", set())
+    active_bus_ids = scenario_context.setdefault("activeBusIds", set())
+    if bus.get("busId") in completed_bus_ids and not bus.get("reroutingActive"):
         return
 
     current_index = int(bus.get("current_index", 0))
@@ -3280,9 +3799,7 @@ def update_route57_scenario_state(bus: dict, route_context: dict, simulation_sec
         return
     if route_length and current_index >= route_length - int(REROUTE_RULES["terminal_guard_points"]):
         return
-    if current_index >= int(affected_end):
-        if scenario_context.get("activated"):
-            scenario_context["state"] = "RESOLVED"
+    if current_index >= int(affected_end) and not bus.get("reroutingActive"):
         return
     if int(simulation_second) < int(REROUTE_RULES["activation_second"]):
         return
@@ -3290,7 +3807,7 @@ def update_route57_scenario_state(bus: dict, route_context: dict, simulation_sec
     scenario_context["activated"] = True
     decision = evaluate_rerouting_decision(bus=bus, route_context=route_context, scenario_context=scenario_context)
 
-    if bus.get("reroutingActive"):
+    if bus.get("reroutingActive") or active_bus_ids:
         scenario_context["state"] = "REROUTING_ACTIVE"
     elif decision["decisionType"] == "REROUTE_RECOMMENDED":
         scenario_context["state"] = "REROUTE_RECOMMENDED"
@@ -3302,7 +3819,7 @@ def update_route57_scenario_state(bus: dict, route_context: dict, simulation_sec
         and entry_index is not None
         and current_index >= int(entry_index)
         and not bus.get("reroutingActive")
-        and not scenario_context.get("completed")
+        and bus.get("busId") not in completed_bus_ids
     )
 
     if can_start_reroute:
@@ -3310,6 +3827,7 @@ def update_route57_scenario_state(bus: dict, route_context: dict, simulation_sec
         bus["reroutingActive"] = True
         bus["rerouteAltIndex"] = 0
         bus["state"] = STATE_REROUTING_ACTIVE
+        active_bus_ids.add(bus["busId"])
         scenario_context["state"] = "REROUTING_ACTIVE"
         print(
             f"REROUTE START {bus['busId']} | "
@@ -3338,8 +3856,9 @@ def complete_route57_reroute(bus: dict, route_context: dict):
     else:
         bus["nextStopIndex"] = len(route_stops)
 
-    scenario_context["state"] = "RESOLVED"
-    scenario_context["completed"] = True
+    scenario_context.setdefault("activeBusIds", set()).discard(bus.get("busId"))
+    scenario_context.setdefault("completedBusIds", set()).add(bus.get("busId"))
+    scenario_context["state"] = "ACTIVE_AHEAD" if scenario_context.get("activated") else "INACTIVE"
     print(
         f"REROUTE COMPLETE {bus['busId']} | "
         f"reconnected to Route_57 at index {bus['current_index']}"
@@ -3387,8 +3906,8 @@ def main():
         "Support buses use residual demand after rescue pickup "
         f"(multiplier={SUPPORT_RESIDUAL_BOARDING_MULTIPLIER})."
     )
-    print("Bus_1 cannot spawn another support bus while one support intervention is active.")
-    print("Support_1 may spawn Support_2 only if Support_1 itself becomes full and leaves queue.")
+    print("Support assignments are deduplicated per parent route and stop sequence.")
+    print("Support_2 is allowed only when limits allow it and the first support cannot handle a severe queue.")
     for route_id, route_context in ROUTE_CONTEXTS.items():
         activate_route_context(route_context)
         print(f"{route_id} support reserve route indices: {get_support_reserve_candidates()}")
@@ -3427,7 +3946,7 @@ def main():
             route_stops = route_context["route_stops"]
             update_route57_scenario_state(bus, route_context, simulation_second)
 
-            if bus.get("reroutingActive") and bus.get("busId") == "Bus_1":
+            if bus.get("reroutingActive") and bus.get("routeContextId") == "Route_57" and bus.get("busRole") == "MAIN":
                 scenario_context = route_context.get("scenario_context")
                 alt_df = scenario_context.get("altShape", pd.DataFrame()) if scenario_context else pd.DataFrame()
                 alt_index = int(bus.get("rerouteAltIndex", 0) or 0)

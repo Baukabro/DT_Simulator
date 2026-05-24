@@ -437,6 +437,85 @@
             gap: 8px;
         }
 
+        .vehicle-analytics {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .vehicle-card {
+            border: 1px solid var(--border);
+            background: var(--surface-soft);
+            border-radius: 12px;
+            padding: 10px;
+        }
+
+        .vehicle-card-title {
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .efficiency-row {
+            display: grid;
+            grid-template-columns: 92px 1fr;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .gauge {
+            width: 92px;
+            height: 52px;
+        }
+
+        .efficiency-score {
+            font-size: 26px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .efficiency-note {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+
+        .sparkline {
+            width: 100%;
+            height: 58px;
+            display: block;
+        }
+
+        .next-stop-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .next-stop-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 8px;
+            align-items: center;
+            font-size: 12px;
+            color: #425463;
+        }
+
+        .next-stop-row b {
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        .decision-summary {
+            font-size: 12px;
+            color: #425463;
+            line-height: 1.45;
+        }
+
         .info-tile,
         .decision-box,
         .analytics {
@@ -511,7 +590,7 @@
 
         .analytics {
             display: grid;
-            grid-template-columns: 1.2fr 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 12px;
             align-items: stretch;
         }
@@ -551,6 +630,14 @@
             font-weight: 700;
         }
 
+        .compact-row small {
+            display: inline-block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 700;
+        }
+
         .incident-marker {
             display: grid;
             place-items: center;
@@ -563,18 +650,39 @@
             font-size: 16px;
         }
 
+        .incident-label {
+            border: 1px solid #f2c68c;
+            background: rgba(255, 248, 235, 0.96);
+            color: #9a4f0f;
+            border-radius: 999px;
+            padding: 5px 9px;
+            font-size: 11px;
+            font-weight: 800;
+            box-shadow: var(--shadow-soft);
+        }
+
+        .roadworks-line {
+            animation: dash-flow 1.2s linear infinite;
+        }
+
+        @keyframes dash-flow {
+            to {
+                stroke-dashoffset: -24;
+            }
+        }
+
         .bar-row {
             display: grid;
-            grid-template-columns: 74px 1fr 40px;
-            gap: 8px;
+            grid-template-columns: 92px minmax(180px, 1fr) 58px;
+            gap: 12px;
             align-items: center;
-            font-size: 12px;
+            font-size: 13px;
             color: #526271;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
 
         .bar-track {
-            height: 8px;
+            height: 12px;
             border-radius: 999px;
             background: #e8eef1;
             overflow: hidden;
@@ -776,10 +884,10 @@
             </div>
             <div class="kpi-card">
                 <div>
-                    <div id="kpi-passengers" class="kpi-value">0</div>
-                    <div class="kpi-label">Current onboard passengers</div>
+                    <div id="kpi-decisions" class="kpi-value">0</div>
+                    <div class="kpi-label">Active decisions</div>
                 </div>
-                <div class="kpi-accent">P</div>
+                <div class="kpi-accent">D</div>
             </div>
         </section>
 
@@ -796,7 +904,7 @@
             </section>
 
             <aside class="panel">
-                <h2 class="panel-title">Live Telemetry / Operator Panel</h2>
+                <h2 class="panel-title">Selected Vehicle Analytics</h2>
                 <div class="operator-block">
                     <label class="operator-label" for="scenario-select">Route_57 scenario</label>
                     <select id="scenario-select" class="operator-select">
@@ -824,16 +932,8 @@
 
         <section class="analytics">
             <div>
-                <h3>Active Recommendations</h3>
-                <div id="active-recommendations" class="issue-list"></div>
-            </div>
-            <div>
                 <h3>Passenger Flow</h3>
                 <div id="passenger-flow"></div>
-            </div>
-            <div>
-                <h3>Fleet Snapshot</h3>
-                <div id="fleet-snapshot" class="compact-list"></div>
             </div>
         </section>
     </div>
@@ -853,7 +953,8 @@
                 title: "Roadworks near Saraishyk / Akmeshit corridor",
                 description: "Lane maintenance and severe local disruption near Saraishyk, Akmeshit and Ministry district.",
                 severity: "HIGH",
-                expectedDelayMinutes: 8
+                expectedDelayMinutes: 8,
+                affectedSequences: [9, 10, 11]
             },
             R57_TRAFFIC_JAM_SARAISHYK: {
                 scenarioId: "R57_TRAFFIC_JAM_SARAISHYK",
@@ -862,7 +963,8 @@
                 title: "Severe congestion near Saraishyk / Akmeshit",
                 description: "Traffic jam causing major delay on the normal Route_57 corridor.",
                 severity: "HIGH",
-                expectedDelayMinutes: 7
+                expectedDelayMinutes: 7,
+                affectedSequences: [9, 10, 11]
             },
             R57_SECURITY_CLOSURE_MINISTRY: {
                 scenarioId: "R57_SECURITY_CLOSURE_MINISTRY",
@@ -871,7 +973,8 @@
                 title: "Security closure near Ministry district",
                 description: "Temporary road restriction near government area.",
                 severity: "HIGH",
-                expectedDelayMinutes: 10
+                expectedDelayMinutes: 10,
+                affectedSequences: [11]
             }
         };
 
@@ -932,6 +1035,7 @@
         const scenarioLayer = L.layerGroup().addTo(map);
         const busMarkers = {};
         const lastBusPoints = {};
+        const busSamples = {};
 
         let latestBuses = [];
         let selectedBusId = "Bus_1";
@@ -966,7 +1070,12 @@
         }
 
         function normalizeStopName(value) {
-            return String(value || "").trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+            return String(value || "")
+                .trim()
+                .toLowerCase()
+                .replace(/\u0451/g, "\u0435")
+                .replace(/\u0401/g, "\u0435")
+                .replace(/\s+/g, " ");
         }
 
         function distanceMeters(latA, lonA, latB, lonB) {
@@ -1215,16 +1324,16 @@
 
                 const fullLayer = L.layerGroup();
                 if (route.showFullRoute && data.shape?.length > 1) {
-                    const scenarioBus = route.id === "Route_57" ? activeScenarioBus() : null;
-                    const hasBlockedSegment = scenarioBus && isScenarioVisible(scenarioBus);
-                    const blockedStart = hasBlockedSegment ? Math.max(0, Math.floor(num(scenarioBus.affectedSegmentStartIndex, -1))) : -1;
-                    const blockedEnd = hasBlockedSegment ? Math.min(data.shape.length - 1, Math.floor(num(scenarioBus.affectedSegmentEndIndex, -1))) : -1;
+                    const bounds = route.id === "Route_57" && route57ScenarioActive() ? route57AffectedBounds() : null;
+                    const hasBlockedSegment = Boolean(bounds);
+                    const blockedStart = bounds ? Math.max(0, Math.floor(num(bounds.start, -1))) : -1;
+                    const blockedEnd = bounds ? Math.min(data.shape.length - 1, Math.floor(num(bounds.end, -1))) : -1;
                     const drawSegment = points => {
                         if (points.length <= 1) return;
                         L.polyline(points.map(point => [point.latitude, point.longitude]), {
                             color: route.color,
                             weight: 4,
-                            opacity: hasBlockedSegment ? 0.32 : 0.55,
+                            opacity: hasBlockedSegment ? 0.38 : 0.55,
                             lineCap: "round",
                             lineJoin: "round"
                         }).addTo(fullLayer);
@@ -1321,8 +1430,9 @@
                 const stops = routeData[route.id]?.stops || [];
                 stops.forEach(stop => {
                     const sameName = stop.normalizedName && stop.normalizedName === nameKey;
-                    const nearby = distanceMeters(clickedStop.latitude, clickedStop.longitude, stop.latitude, stop.longitude) <= 140;
-                    if ((sameName && nearby) || (route.id === clickedRouteId && Number(stop.sequence) === Number(clickedStop.sequence))) {
+                    const distance = distanceMeters(clickedStop.latitude, clickedStop.longitude, stop.latitude, stop.longitude);
+                    const nearby = distance <= 140;
+                    if (nearby || (sameName && distance <= 180) || (route.id === clickedRouteId && Number(stop.sequence) === Number(clickedStop.sequence))) {
                         cluster.push({ routeId: route.id, stop });
                     }
                 });
@@ -1332,14 +1442,31 @@
         }
 
         function route57AffectedBounds() {
+            const scenario = SCENARIOS[selectedScenarioId];
             const stops = routeData.Route_57?.stops || [];
-            const affected = stops.filter(stop => [9, 10, 11].includes(Number(stop.sequence)));
+            const affectedSequences = scenario?.affectedSequences || [9, 10, 11];
+            const affected = stops.filter(stop => affectedSequences.includes(Number(stop.sequence)));
             if (!affected.length) return null;
             return {
                 start: Math.min(...affected.map(stop => stop.routeIndex)),
                 end: Math.max(...affected.map(stop => stop.routeIndex)),
                 stops: affected
             };
+        }
+
+        function route57ScenarioActive() {
+            return selectedScenarioId !== "NONE" && Boolean(SCENARIOS[selectedScenarioId]);
+        }
+
+        function scenarioVisual(type) {
+            const normalized = String(type || "ROADWORKS").toUpperCase();
+            if (normalized === "TRAFFIC_JAM") {
+                return { color: "#d94141", altColor: "#0f9faf", dash: "8 9", label: "Severe congestion" };
+            }
+            if (normalized === "SECURITY_CLOSURE") {
+                return { color: "#b4232d", altColor: "#2367e8", dash: "2 8", label: "Restricted road" };
+            }
+            return { color: "#e15a24", altColor: "#009f88", dash: "10 8", label: "Roadworks" };
         }
 
         function nearestAlternativeDistanceForStop(stop) {
@@ -1352,7 +1479,7 @@
         }
 
         function route57StopAffectedByScenario(routeId, stop) {
-            if (routeId !== "Route_57" || selectedScenarioId === "NONE") return false;
+            if (routeId !== "Route_57" || !route57ScenarioActive()) return false;
             const bounds = route57AffectedBounds();
             return Boolean(bounds && stop.routeIndex >= bounds.start && stop.routeIndex <= bounds.end);
         }
@@ -1547,10 +1674,10 @@
 
                 const start = Math.max(0, index - 4);
                 const end = Math.min(shape.length - 1, index + 8);
-                const scenarioBus = routeId === "Route_57" ? activeScenarioBus() : null;
-                if (scenarioBus && isScenarioVisible(scenarioBus)) {
-                    const blockedStart = Math.floor(num(scenarioBus.affectedSegmentStartIndex, -1));
-                    const blockedEnd = Math.floor(num(scenarioBus.affectedSegmentEndIndex, -1));
+                const bounds = routeId === "Route_57" && route57ScenarioActive() ? route57AffectedBounds() : null;
+                if (bounds) {
+                    const blockedStart = Math.floor(num(bounds.start, -1));
+                    const blockedEnd = Math.floor(num(bounds.end, -1));
                     const overlapsBlocked = blockedStart >= 0 && blockedEnd >= blockedStart && start <= blockedEnd && end >= blockedStart;
                     if (overlapsBlocked) return;
                 }
@@ -1589,27 +1716,25 @@
 
         function incidentIcon(type) {
             const icons = {
-                ROADWORKS: "🚧",
-                TRAFFIC_JAM: "🚦",
-                SECURITY_CLOSURE: "⛔",
-                ACCIDENT: "⚠️",
-                BLOCKAGE: "⛔"
+                ROADWORKS: "\uD83D\uDEA7",
+                TRAFFIC_JAM: "\uD83D\uDEA6",
+                SECURITY_CLOSURE: "\u26D4",
+                ACCIDENT: "\u26A0\uFE0F",
+                BLOCKAGE: "\u26D4"
             };
-            return icons[String(type || "").toUpperCase()] || "⚠️";
+            return icons[String(type || "").toUpperCase()] || "\u26A0\uFE0F";
         }
 
         function isScenarioVisible(bus) {
             const decision = String(bus?.reroutingDecision || bus?.reroutingRecommendation?.decisionType || "NORMAL");
-            return selectedScenarioId !== "NONE" && Boolean(bus?.scenarioId) && !["NORMAL", "MONITOR"].includes(decision);
+            return route57ScenarioActive() || (Boolean(bus?.scenarioId) && !["NORMAL", "MONITOR"].includes(decision));
         }
 
         function activeScenarioBus() {
-            if (selectedScenarioId === "NONE") return null;
+            if (!route57ScenarioActive()) return null;
             return latestBuses.find(item =>
-                item.scenarioId
-                && normalizeRouteId(item.routeId) === "Route_57"
-                && (selectedScenarioId === item.scenarioId || SCENARIOS[selectedScenarioId])
-            ) || null;
+                normalizeRouteId(item.routeId) === "Route_57" && !isSupportBus(item)
+            ) || latestBuses.find(item => normalizeRouteId(item.routeId) === "Route_57") || null;
         }
 
         function displayScenarioForBus(bus) {
@@ -1630,49 +1755,64 @@
         function renderScenarioLayers() {
             scenarioLayer.clearLayers();
 
-            const bus = activeScenarioBus();
-            if (!bus || !isScenarioVisible(bus)) return;
+            if (!route57ScenarioActive()) return;
 
-            const scenario = displayScenarioForBus(bus);
+            const bus = activeScenarioBus();
+            const scenario = displayScenarioForBus(bus) || SCENARIOS[selectedScenarioId];
+            const visual = scenarioVisual(scenario?.incidentType);
             const data = routeData.Route_57 || {};
             const shape = data.shape || [];
-            const start = Math.max(0, Math.floor(num(bus.affectedSegmentStartIndex, -1)));
-            const end = Math.min(shape.length - 1, Math.floor(num(bus.affectedSegmentEndIndex, -1)));
+            const bounds = route57AffectedBounds();
+            const start = Math.max(0, Math.floor(num(bus?.affectedSegmentStartIndex, bounds?.start ?? -1)));
+            const end = Math.min(shape.length - 1, Math.floor(num(bus?.affectedSegmentEndIndex, bounds?.end ?? -1)));
 
             if (shape.length > 1 && start >= 0 && end > start) {
                 const section = shape.slice(start, end + 1).map(point => [point.latitude, point.longitude]);
                 L.polyline(section, {
-                    color: "#e15a24",
+                    color: visual.color,
                     weight: 9,
                     opacity: 0.88,
+                    dashArray: visual.dash,
+                    className: "roadworks-line",
                     lineCap: "round",
                     lineJoin: "round"
                 }).addTo(scenarioLayer);
 
                 const midPoint = shape[Math.floor((start + end) / 2)];
+                [start, Math.floor((start + end) / 2), end].forEach(index => {
+                    const point = shape[index];
+                    if (!point) return;
+                    L.marker([point.latitude, point.longitude], {
+                        icon: L.divIcon({
+                            className: "",
+                            html: `<div class="incident-marker">${incidentIcon(scenario?.incidentType || bus?.incidentType)}</div>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14]
+                        })
+                    }).bindPopup(`
+                        <div>
+                            <div class="popup-title">${escapeHtml(scenario?.title || bus?.incidentTitle || "Route incident")}</div>
+                            <div class="popup-row"><span>Route</span><b>Route_57</b></div>
+                            <div class="popup-row"><span>Severity</span><b>${escapeHtml(scenario?.severity || "HIGH")}</b></div>
+                        </div>
+                    `).addTo(scenarioLayer);
+                });
+
                 L.marker([midPoint.latitude, midPoint.longitude], {
                     icon: L.divIcon({
                         className: "",
-                        html: `<div class="incident-marker">${incidentIcon(scenario?.incidentType || bus.incidentType)}</div>`,
-                        iconSize: [28, 28],
-                        iconAnchor: [14, 14]
+                        html: `<div class="incident-label">${escapeHtml(visual.label)}</div>`,
+                        iconSize: [116, 26],
+                        iconAnchor: [58, -10]
                     })
-                }).bindPopup(`
-                    <div>
-                        <div class="popup-title">${escapeHtml(scenario?.title || bus.incidentTitle || "Route incident")}</div>
-                        <div class="popup-row"><span>Route</span><b>Route_57</b></div>
-                        <div class="popup-row"><span>Severity</span><b>${escapeHtml(scenario?.severity || "HIGH")}</b></div>
-                    </div>
-                `).addTo(scenarioLayer);
+                }).addTo(scenarioLayer);
             }
 
-            const decision = String(bus.reroutingDecision || "");
-            if (["REROUTE_RECOMMENDED", "REROUTING_ACTIVE"].includes(decision) && data.altShape?.length > 1) {
+            if (data.altShape?.length > 1) {
                 L.polyline(data.altShape.map(point => [point.latitude, point.longitude]), {
-                    color: "#009f88",
+                    color: visual.altColor,
                     weight: 6,
                     opacity: 0.86,
-                    dashArray: decision === "REROUTE_RECOMMENDED" ? "10 8" : null,
                     lineCap: "round",
                     lineJoin: "round"
                 }).addTo(scenarioLayer);
@@ -1684,7 +1824,7 @@
             const byRoute = aggregateRoutes();
 
             container.innerHTML = Object.values(ROUTES).map(route => {
-                const stats = byRoute[route.id] || { buses: [], ordinaryCount: 0, supportCount: 0, avgLoad: 0, status: "Standby", statusClass: "", interval: "Standby" };
+                const stats = byRoute[route.id] || { buses: [], ordinaryCount: 0, supportCount: 0, avgLoad: 0, status: "MONITOR", statusClass: "", interval: `${Math.round((route.headwaySeconds || 420) / 60)} min est.` };
                 const data = routeData[route.id] || {};
                 const traffic = stats.status;
                 return `
@@ -1736,9 +1876,9 @@
                     ordinaryCount: 0,
                     supportCount: 0,
                     avgLoad: 0,
-                    status: "Standby",
+                    status: "MONITOR",
                     statusClass: "",
-                    interval: "Standby"
+                    interval: `${Math.round((ROUTES[routeId]?.headwaySeconds || 420) / 60)} min est.`
                 };
             });
 
@@ -1759,24 +1899,29 @@
                 const hasHighTraffic = stats.buses.some(bus => bus.trafficLevel === "HIGH");
                 const hasQueue = stats.buses.some(bus => num(bus.waitingPassengers) > 0);
                 const hasSupport = stats.buses.some(isSupportBus);
-                const hasRerouting = stats.buses.some(bus => bus.reroutingActive || bus.reroutingDecision === "REROUTING_ACTIVE");
+                const hasRerouting = routeId === "Route_57" && route57ScenarioActive()
+                    && stats.buses.some(bus => bus.reroutingActive || bus.reroutingDecision === "REROUTING_ACTIVE" || bus.eventType === "REROUTING");
+                const waitingNextBus = stats.buses.some(bus => bus.supportDecision === "WAIT_FOR_NEXT_BUS") || (hasQueue && stats.ordinaryCount > 1 && !hasSupport);
                 const headway = ROUTES[routeId]?.headwaySeconds || 420;
-                stats.interval = stats.buses.length > 1 ? "active multi-bus" : `${Math.round(headway / 60)} min est.`;
+                stats.interval = `${Math.round(headway / 60)} min est.`;
 
                 if (hasRerouting) {
-                    stats.status = "Rerouting";
+                    stats.status = "REROUTING";
                     stats.statusClass = "reroute";
                 } else if (hasSupport) {
-                    stats.status = "Support operating";
+                    stats.status = "SUPPORT OPERATING";
+                    stats.statusClass = "warn";
+                } else if (waitingNextBus) {
+                    stats.status = "WAITING NEXT BUS";
                     stats.statusClass = "warn";
                 } else if (hasQueue) {
-                    stats.status = "Queue";
+                    stats.status = "QUEUE";
                     stats.statusClass = "danger";
                 } else if (hasHighTraffic) {
-                    stats.status = "Delay risk";
+                    stats.status = "DELAYED";
                     stats.statusClass = "warn";
                 } else {
-                    stats.status = "Normal";
+                    stats.status = "NORMAL";
                     stats.statusClass = "";
                 }
             });
@@ -1849,17 +1994,96 @@
 
         function updateKpis() {
             const baseRoutes = new Set(latestBuses.map(bus => normalizeRouteId(bus.routeId)).filter(Boolean));
-            const passengers = latestBuses.reduce((sum, bus) => sum + num(bus.passengerCount), 0);
             const alerts = buildOperationalAlerts().length;
+            const decisions = buildRouteDecisionItems().length;
 
             document.getElementById("kpi-active-buses").textContent = latestBuses.length;
             document.getElementById("kpi-active-routes").textContent = baseRoutes.size;
             document.getElementById("kpi-alerts").textContent = alerts;
-            document.getElementById("kpi-passengers").textContent = passengers;
+            document.getElementById("kpi-decisions").textContent = decisions;
         }
 
         function tile(label, value) {
             return `<div class="info-tile"><span>${label}</span><b>${escapeHtml(value)}</b></div>`;
+        }
+
+        function recordBusSamples() {
+            latestBuses.forEach(bus => {
+                if (!busSamples[bus.busId]) busSamples[bus.busId] = [];
+                busSamples[bus.busId].push({
+                    passengerCount: num(bus.passengerCount),
+                    speedKmh: speedKmh(bus),
+                    timestamp: Date.now()
+                });
+                busSamples[bus.busId] = busSamples[bus.busId].slice(-28);
+            });
+        }
+
+        function trendSvg(values, color, maxValue) {
+            const clean = values.map(value => num(value)).slice(-28);
+            const width = 260;
+            const height = 54;
+            if (!clean.length) {
+                return `<svg class="sparkline" viewBox="0 0 ${width} ${height}" role="img"><line x1="0" y1="42" x2="${width}" y2="42" stroke="#dbe6eb" stroke-width="2"/></svg>`;
+            }
+            const max = Math.max(maxValue || 0, ...clean, 1);
+            const step = clean.length > 1 ? width / (clean.length - 1) : width;
+            const points = clean.map((value, index) => {
+                const x = index * step;
+                const y = height - 8 - (Math.min(value, max) / max) * (height - 16);
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+            }).join(" ");
+            return `
+                <svg class="sparkline" viewBox="0 0 ${width} ${height}" role="img">
+                    <line x1="0" y1="${height - 8}" x2="${width}" y2="${height - 8}" stroke="#dbe6eb" stroke-width="2"/>
+                    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
+        }
+
+        function efficiencyScore(bus) {
+            let score = 100;
+            const loadPercent = (num(bus.passengerCount) / BUS_CAPACITY) * 100;
+            const waiting = num(bus.waitingPassengers);
+            const traffic = String(bus.trafficLevel || "LOW").toUpperCase();
+
+            if (traffic === "HIGH") score -= 18;
+            else if (traffic === "MEDIUM") score -= 8;
+            if (loadPercent >= 95) score -= 18;
+            else if (loadPercent >= 80) score -= 8;
+            if (waiting > 0) score -= Math.min(20, waiting * 2);
+            if (num(bus.dwellRemaining) > 30) score -= 8;
+            if (bus.reroutingActive || bus.eventType === "REROUTING") score -= 5;
+            if (isSupportBus(bus) || bus.supportDecision === "WAIT_FOR_NEXT_BUS") score += 6;
+
+            return Math.max(0, Math.min(100, Math.round(score)));
+        }
+
+        function gaugeSvg(score) {
+            const color = score >= 80 ? "#1a9c62" : score >= 60 ? "#d98412" : "#d94141";
+            return `
+                <svg class="gauge" viewBox="0 0 100 60" role="img">
+                    <path d="M12 50 A38 38 0 0 1 88 50" fill="none" stroke="#dbe6eb" stroke-width="10" stroke-linecap="round" pathLength="100"/>
+                    <path d="M12 50 A38 38 0 0 1 88 50" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="${score} 100"/>
+                </svg>
+            `;
+        }
+
+        function nextStopsForBus(bus) {
+            const routeId = normalizeRouteId(bus.routeId);
+            const stops = routeData[routeId]?.stops || [];
+            if (!bus || !stops.length) return [];
+
+            const currentIndex = Number.isFinite(num(bus.currentRouteIndex, NaN))
+                ? Math.floor(num(bus.currentRouteIndex))
+                : nearestShapeIndex(routeId, num(bus.latitude), num(bus.longitude));
+
+            return stops
+                .filter(stop => stop.routeIndex >= currentIndex)
+                .filter(stop => !(routeId === "Route_57" && route57StopAffectedByScenario(routeId, stop)))
+                .map(stop => ({ stop, arrival: estimateArrival(bus, routeId, stop) }))
+                .filter(item => item.arrival)
+                .slice(0, 3);
         }
 
         function updateBusDetail() {
@@ -1867,26 +2091,55 @@
             const container = document.getElementById("bus-detail");
 
             if (!bus) {
-                container.innerHTML = `<div class="info-tile" style="grid-column:1/-1"><span>Status</span><b>Waiting for live telemetry</b></div>`;
+                container.className = "vehicle-analytics";
+                container.innerHTML = `<div class="vehicle-card"><div class="vehicle-card-title">Status</div><div class="decision-summary">Waiting for live telemetry.</div></div>`;
                 return;
             }
 
-            const role = isSupportBus(bus) ? "SUPPORT" : "MAIN";
-            container.innerHTML = [
-                tile("Bus ID", bus.busId),
-                tile("Route", normalizeRouteId(bus.routeId)),
-                tile("Role", role),
-                tile("Speed", `${speedKmh(bus).toFixed(1)} km/h`),
-                tile("Passengers", `${num(bus.passengerCount)}/${BUS_CAPACITY}`),
-                tile("Event", bus.eventType || "-"),
-                tile("Door", bus.doorStatus || "-"),
-                tile("Traffic", bus.trafficLevel || "-"),
-                tile("Current stop", bus.currentStopName || "-"),
-                tile("Boarded", `+${num(bus.boardingCount)}`),
-                tile("Alighted", `-${num(bus.alightingCount)}`),
-                tile("Unserved", num(bus.waitingPassengers)),
-                tile("Dwell", `${num(bus.dwellRemaining)} s`)
-            ].join("");
+            container.className = "vehicle-analytics";
+            const samples = busSamples[bus.busId] || [];
+            const loadValues = samples.map(sample => sample.passengerCount);
+            const speedValues = samples.map(sample => sample.speedKmh);
+            const score = efficiencyScore(bus);
+            const decision = getDecision(bus);
+            const nextStops = nextStopsForBus(bus);
+            const loadPercent = Math.round((num(bus.passengerCount) / BUS_CAPACITY) * 100);
+
+            container.innerHTML = `
+                <div class="vehicle-card">
+                    <div class="vehicle-card-title">Route Efficiency</div>
+                    <div class="efficiency-row">
+                        ${gaugeSvg(score)}
+                        <div>
+                            <div class="efficiency-score">${score}%</div>
+                            <div class="efficiency-note">${escapeHtml(normalizeRouteId(bus.routeId))} · load ${loadPercent}% · ${escapeHtml(bus.trafficLevel || "LOW")} traffic</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="vehicle-card">
+                    <div class="vehicle-card-title">Passenger Load Trend</div>
+                    ${trendSvg(loadValues, getRouteColor(bus.routeId), BUS_CAPACITY)}
+                </div>
+                <div class="vehicle-card">
+                    <div class="vehicle-card-title">Speed Trend</div>
+                    ${trendSvg(speedValues, "#0f9faf", 60)}
+                </div>
+                <div class="vehicle-card">
+                    <div class="vehicle-card-title">Next Stops</div>
+                    <div class="next-stop-list">
+                        ${nextStops.length ? nextStops.map(item => `
+                            <div class="next-stop-row">
+                                <span>${escapeHtml(item.stop.name)}</span>
+                                <b>${escapeHtml(item.arrival.etaLabel)}</b>
+                            </div>
+                        `).join("") : `<div class="decision-summary">No downstream stop ETA available.</div>`}
+                    </div>
+                </div>
+                <div class="vehicle-card">
+                    <div class="vehicle-card-title">Current Decision</div>
+                    <div class="decision-summary">${escapeHtml(decision.title)} · ${escapeHtml(decision.pill)}</div>
+                </div>
+            `;
         }
 
         function getDecision(bus) {
@@ -1913,8 +2166,8 @@
                 };
             }
 
-            const reroutingDecision = String(bus.reroutingDecision || bus.reroutingRecommendation?.decisionType || "NORMAL");
-            if (selectedScenarioId !== "NONE" && bus.scenarioId && reroutingDecision !== "NORMAL") {
+            const reroutingDecision = String(bus.reroutingDecision || bus.reroutingRecommendation?.decisionType || (bus.eventType === "REROUTING" ? "REROUTING_ACTIVE" : "NORMAL"));
+            if (route57ScenarioActive() && normalizeRouteId(bus.routeId) === "Route_57") {
                 const scenario = displayScenarioForBus(bus);
                 const active = reroutingDecision === "REROUTING_ACTIVE";
                 const recommended = reroutingDecision === "REROUTE_RECOMMENDED";
@@ -1957,7 +2210,7 @@
                 };
             }
 
-            if (bus.supportDecision === "MONITOR_QUEUE" || queue > 0) {
+            if (["MONITOR_QUEUE", "WAIT_FOR_NEXT_BUS", "REUSE_SUPPORT_BUS", "SUPPORT_OPERATING"].includes(bus.supportDecision) || queue > 0) {
                 return {
                     title: bus.supportDecision === "WAIT_FOR_NEXT_BUS" ? "Wait for next bus" : "Monitor queue",
                     pill: "WATCH",
@@ -2002,50 +2255,102 @@
             const alerts = [];
             const scenarioBus = activeScenarioBus();
 
-            if (scenarioBus && isScenarioVisible(scenarioBus)) {
-                const scenario = displayScenarioForBus(scenarioBus);
-                const decision = String(scenarioBus.reroutingDecision || "MONITOR");
+            if (route57ScenarioActive()) {
+                const scenario = displayScenarioForBus(scenarioBus) || SCENARIOS[selectedScenarioId];
+                const decision = String(scenarioBus?.reroutingDecision || (scenarioBus?.eventType === "REROUTING" ? "REROUTING_ACTIVE" : "MONITOR"));
                 alerts.push({
                     level: "high",
-                    title: `${incidentIcon(scenario?.incidentType)} ${scenario?.title || scenarioBus.incidentTitle}`,
-                    meta: `Route_57 · ${scenario?.severity || "HIGH"} impact · Expected delay ${num(scenario?.expectedDelayMinutes || scenarioBus.expectedDelayMinutes)} min`,
-                    action: decision === "REROUTING_ACTIVE" ? "Reroute active" : scenarioBus.reroutingRecommendation?.action || "Monitor"
+                    title: `${incidentIcon(scenario?.incidentType)} ${scenario?.title || "Route_57 incident"}`,
+                    meta: `Route_57 · ${scenario?.severity || "HIGH"} impact · Expected delay ${num(scenario?.expectedDelayMinutes || scenarioBus?.expectedDelayMinutes)} min`,
+                    action: decision === "REROUTING_ACTIVE" || scenarioBus?.eventType === "REROUTING" ? "Reroute active" : "Alternative corridor active"
+                });
+            }
+
+            buildRouteDecisionItems()
+                .filter(item => item.kind !== "scenario")
+                .slice(0, 4)
+                .forEach(item => alerts.push({
+                    level: item.level,
+                    title: item.title,
+                    meta: item.meta,
+                    action: item.action
+                }));
+
+            return alerts.slice(0, 5);
+        }
+
+        function buildRouteDecisionItems() {
+            const items = [];
+            const seen = new Set();
+
+            if (route57ScenarioActive()) {
+                const bus = activeScenarioBus();
+                const scenario = displayScenarioForBus(bus) || SCENARIOS[selectedScenarioId];
+                const active = bus?.eventType === "REROUTING" || bus?.reroutingDecision === "REROUTING_ACTIVE";
+                items.push({
+                    kind: "scenario",
+                    routeId: "Route_57",
+                    level: "high",
+                    title: `${incidentIcon(scenario?.incidentType)} Route_57 - ${active ? "Reroute active" : "Reroute corridor ready"}`,
+                    meta: `${scenario?.severity || "HIGH"} impact · ${scenario?.title || "Scenario active"}`,
+                    action: active ? "Reroute active" : "Alternative corridor active"
                 });
             }
 
             latestBuses.forEach(bus => {
-                if (bus.supportDecision === "DISPATCH_SUPPORT_BUS") {
-                    alerts.push({
+                const routeId = normalizeRouteId(bus.routeId);
+                const queue = num(bus.waitingPassengers);
+                const keyBase = `${routeId}:${bus.currentStopName || "route"}`;
+
+                if (isSupportBus(bus)) {
+                    const key = `${routeId}:support`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    items.push({
+                        kind: "support",
+                        routeId,
+                        level: "info",
+                        title: "\uD83D\uDFE2 Support operating",
+                        meta: `${routeId} · Queue mitigation in progress`,
+                        action: bus.eventType === "STOP" ? "Boarding passengers" : "Continuing service"
+                    });
+                } else if (bus.supportDecision === "DISPATCH_SUPPORT_BUS" || (queue >= 5 && num(bus.passengerCount) >= BUS_CAPACITY)) {
+                    if (seen.has(`${keyBase}:dispatch`)) return;
+                    seen.add(`${keyBase}:dispatch`);
+                    items.push({
+                        kind: "dispatch",
+                        routeId,
                         level: "high",
-                        title: "Support bus recommendation",
-                        meta: `${normalizeRouteId(bus.routeId)} · Unserved queue ${num(bus.waitingPassengers)} at ${bus.currentStopName || "current stop"}`,
+                        title: "Support bus needed",
+                        meta: `${routeId} · Queue ${queue} at ${bus.currentStopName || "current stop"}`,
                         action: "Dispatch support bus"
                     });
                 } else if (bus.supportDecision === "WAIT_FOR_NEXT_BUS") {
-                    alerts.push({
+                    if (seen.has(`${keyBase}:wait`)) return;
+                    seen.add(`${keyBase}:wait`);
+                    items.push({
+                        kind: "wait",
+                        routeId,
                         level: "info",
                         title: "Wait for next regular bus",
-                        meta: `${normalizeRouteId(bus.routeId)} · ${bus.nextRegularBusId || "Next bus"} ETA ${num(bus.nextRegularBusEtaMinutes).toFixed(1)} min`,
+                        meta: `${routeId} · ${bus.nextRegularBusId || "Next bus"} ETA ${num(bus.nextRegularBusEtaMinutes).toFixed(1)} min`,
                         action: "Monitor queue"
                     });
-                } else if (isSupportBus(bus)) {
-                    alerts.push({
-                        level: "info",
-                        title: "Support operating",
-                        meta: `${normalizeRouteId(bus.routeId)} · Queue mitigation in progress`,
-                        action: bus.eventType === "STOP" ? "Boarding passengers" : "Moving to service point"
-                    });
-                } else if (num(bus.waitingPassengers) > 0) {
-                    alerts.push({
+                } else if (queue > 0) {
+                    if (seen.has(`${keyBase}:monitor`)) return;
+                    seen.add(`${keyBase}:monitor`);
+                    items.push({
+                        kind: "queue",
+                        routeId,
                         level: "info",
                         title: "Monitor queue",
-                        meta: `${normalizeRouteId(bus.routeId)} · ${num(bus.waitingPassengers)} unserved passengers`,
+                        meta: `${routeId} · ${queue} unserved passengers`,
                         action: "Monitor"
                     });
                 }
             });
 
-            return alerts.slice(0, 5);
+            return items.slice(0, 5);
         }
 
         function updateSystemAlerts() {
@@ -2072,34 +2377,7 @@
             `;
         }
 
-        function updateRecommendations() {
-            const active = latestBuses
-                .map(bus => ({ bus, decision: getDecision(bus) }))
-                .filter(item => item.decision.pill !== "NORMAL" && item.decision.pill !== "STANDBY");
-
-            const container = document.getElementById("active-recommendations");
-            if (!active.length) {
-                container.innerHTML = `<div class="issue-item"><span>No active intervention</span><b>Normal</b></div>`;
-                return;
-            }
-
-            container.innerHTML = active.slice(0, 5).map(item => `
-                <div class="issue-item">
-                    <span>${escapeHtml(item.bus.busId)} / ${escapeHtml(normalizeRouteId(item.bus.routeId))}<br><small>${escapeHtml(item.decision.rows?.[0]?.[1] || "")}</small></span>
-                    <b>${escapeHtml(item.decision.title)}</b>
-                </div>
-            `).join("");
-        }
-
         function updateAnalytics() {
-            const supportCount = latestBuses.filter(isSupportBus).length;
-            const stoppedCount = latestBuses.filter(bus => bus.eventType === "STOP" || bus.doorStatus === "OPEN").length;
-            document.getElementById("fleet-snapshot").innerHTML = `
-                <div class="compact-row"><span>Support buses</span><b>${supportCount}</b></div>
-                <div class="compact-row"><span>At stops</span><b>${stoppedCount}</b></div>
-                <div class="compact-row"><span>Latest update</span><b>${new Date().toLocaleTimeString()}</b></div>
-            `;
-
             const byRoute = aggregateRoutes();
             document.getElementById("passenger-flow").innerHTML = Object.entries(byRoute).map(([routeId, stats]) => {
                 const onboard = stats.buses.reduce((sum, bus) => sum + num(bus.passengerCount), 0);
@@ -2112,6 +2390,7 @@
                     </div>
                 `;
             }).join("");
+
         }
 
         function rememberBusPoints() {
@@ -2135,7 +2414,6 @@
             updateBusDetail();
             updateDecisionCenter();
             updateSystemAlerts();
-            updateRecommendations();
             updateAnalytics();
         }
 
@@ -2147,6 +2425,7 @@
                 const response = await fetch(`${API_BASE}/api/buses/latest`);
                 const data = await response.json();
                 latestBuses = Array.isArray(data) ? data.filter(bus => bus.latitude && bus.longitude) : [];
+                recordBusSamples();
                 renderAll();
                 rememberBusPoints();
             } catch (error) {
