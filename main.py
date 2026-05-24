@@ -384,7 +384,7 @@ def get_system_overview():
         latest_rows = cur.fetchall()
 
         active_buses = len(latest_rows)
-        unique_routes = len(set(row[1] for row in latest_rows))
+        unique_routes = len(set(str(row[1]).replace("_SUPPORT", "") for row in latest_rows))
         avg_speed = 0.0
 
         if active_buses > 0:

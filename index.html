@@ -722,6 +722,15 @@
             box-shadow: 0 2px 8px rgba(30, 56, 73, 0.16);
         }
 
+        .alt-stop-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid #009f88;
+            box-shadow: 0 2px 8px rgba(30, 56, 73, 0.18);
+        }
+
         .leaflet-popup-content-wrapper {
             border-radius: 12px;
             box-shadow: var(--shadow);
@@ -911,7 +920,7 @@
                         <option value="NONE">No scenario</option>
                         <option value="R57_ROADWORKS_SARAISHYK" selected>Route_57: ROADWORKS</option>
                         <option value="R57_TRAFFIC_JAM_SARAISHYK">Route_57: TRAFFIC_JAM</option>
-                        <option value="R57_SECURITY_CLOSURE_MINISTRY">Route_57: SECURITY_CLOSURE</option>
+                        <option value="R57_SECURITY_CLOSURE_MINISTRY">Route_57: SECURITY_CLOSURE / Ministry closure</option>
                     </select>
                 </div>
 
@@ -950,31 +959,31 @@
                 scenarioId: "R57_ROADWORKS_SARAISHYK",
                 routeId: "Route_57",
                 incidentType: "ROADWORKS",
-                title: "Roadworks near Saraishyk / Akmeshit corridor",
-                description: "Lane maintenance and severe local disruption near Saraishyk, Akmeshit and Ministry district.",
+                title: "Roadworks near Syganak / Kabanbay Batyr",
+                description: "Lane maintenance and severe local disruption on Syganak street and Kabanbay Batyr avenue.",
                 severity: "HIGH",
                 expectedDelayMinutes: 8,
-                affectedSequences: [9, 10, 11]
+                affectedSequences: [8]
             },
             R57_TRAFFIC_JAM_SARAISHYK: {
                 scenarioId: "R57_TRAFFIC_JAM_SARAISHYK",
                 routeId: "Route_57",
                 incidentType: "TRAFFIC_JAM",
-                title: "Severe congestion near Saraishyk / Akmeshit",
-                description: "Traffic jam causing major delay on the normal Route_57 corridor.",
+                title: "Severe congestion near Syganak / Kabanbay Batyr",
+                description: "Traffic jam causing major delay on Syganak street and Kabanbay Batyr avenue.",
                 severity: "HIGH",
                 expectedDelayMinutes: 7,
-                affectedSequences: [9, 10, 11]
+                affectedSequences: [8]
             },
             R57_SECURITY_CLOSURE_MINISTRY: {
                 scenarioId: "R57_SECURITY_CLOSURE_MINISTRY",
                 routeId: "Route_57",
                 incidentType: "SECURITY_CLOSURE",
-                title: "Security closure near Ministry district",
-                description: "Temporary road restriction near government area.",
+                title: "Security closure near Syganak / Kabanbay Batyr",
+                description: "Temporary restricted road section on Syganak street and Kabanbay Batyr avenue.",
                 severity: "HIGH",
                 expectedDelayMinutes: 10,
-                affectedSequences: [11]
+                affectedSequences: [8]
             }
         };
 
@@ -987,6 +996,23 @@
                 stopsFile: "data/routes/route_57/route_57_stops.csv",
                 altShapeFile: "data/routes/route_57/route_57_shape_alt.csv",
                 altStopsFile: "data/routes/route_57/route_57_stops_alt.csv",
+                scenarioAlternatives: {
+                    R57_ROADWORKS_SARAISHYK: {
+                        altShapeFile: "data/routes/route_57/route_57_shape_alt.csv",
+                        altStopsFile: "data/routes/route_57/route_57_stops_alt.csv",
+                        alternativeRouteId: "Route_57_ALT_ROADWORKS"
+                    },
+                    R57_TRAFFIC_JAM_SARAISHYK: {
+                        altShapeFile: "data/routes/route_57/route_57_shape_alt.csv",
+                        altStopsFile: "data/routes/route_57/route_57_stops_alt.csv",
+                        alternativeRouteId: "Route_57_ALT_TRAFFIC"
+                    },
+                    R57_SECURITY_CLOSURE_MINISTRY: {
+                        altShapeFile: "data/routes/route_57/route_57_shape_alt_minis.csv",
+                        altStopsFile: "data/routes/route_57/route_57_stops_alt_minis.csv",
+                        alternativeRouteId: "Route_57_ALT_MINISTRY"
+                    }
+                },
                 headwaySeconds: 420,
                 showFullRoute: false,
                 showStops: true
@@ -1191,6 +1217,7 @@
                 stops: [],
                 altShape: [],
                 altStops: [],
+                scenarioAlternatives: {},
                 hasShape: false,
                 hasStops: false,
                 hasAltShape: false,
@@ -1265,6 +1292,57 @@
                 }
             }
 
+            if (route.scenarioAlternatives) {
+                await Promise.all(Object.entries(route.scenarioAlternatives).map(async ([scenarioId, alternative]) => {
+                    const scenarioData = {
+                        altShape: [],
+                        altStops: [],
+                        hasAltShape: false,
+                        hasAltStops: false,
+                        alternativeRouteId: alternative.alternativeRouteId
+                    };
+
+                    if (alternative.altShapeFile) {
+                        try {
+                            const rows = await fetchCsv(alternative.altShapeFile);
+                            scenarioData.altShape = rows
+                                .map(row => ({
+                                    sequence: num(pick(row, ["point_sequence", "sequence", "id"])),
+                                    latitude: num(pick(row, ["latitude", "lat"])),
+                                    longitude: num(pick(row, ["longitude", "lon", "lng"]))
+                                }))
+                                .filter(point => point.latitude && point.longitude)
+                                .sort((a, b) => a.sequence - b.sequence);
+                            scenarioData.hasAltShape = scenarioData.altShape.length > 1;
+                        } catch (error) {
+                            console.warn(`${route.id} ${scenarioId} alternative shape not loaded:`, error);
+                        }
+                    }
+
+                    if (alternative.altStopsFile) {
+                        try {
+                            const rows = await fetchCsv(alternative.altStopsFile);
+                            scenarioData.altStops = rows
+                                .map(row => ({
+                                    sequence: num(pick(row, ["stop_sequence", "sequence", "id"])),
+                                    name: pick(row, ["stop_name", "name", "stop"]) || "Alternative stop",
+                                    latitude: num(pick(row, ["latitude", "lat"])),
+                                    longitude: num(pick(row, ["longitude", "lon", "lng"])),
+                                    demandLevel: String(pick(row, ["demand_level", "demand"]) || "MEDIUM").toUpperCase(),
+                                    isAlternativeStop: true
+                                }))
+                                .filter(stop => stop.latitude && stop.longitude)
+                                .sort((a, b) => a.sequence - b.sequence);
+                            scenarioData.hasAltStops = scenarioData.altStops.length > 0;
+                        } catch (error) {
+                            console.warn(`${route.id} ${scenarioId} alternative stops not loaded:`, error);
+                        }
+                    }
+
+                    data.scenarioAlternatives[scenarioId] = scenarioData;
+                }));
+            }
+
             if (data.hasShape) enrichRouteData(data);
             routeData[route.id] = data;
         }
@@ -1281,6 +1359,16 @@
                 html: `<div class="stop-dot" style="background:${route.color}"></div>`,
                 iconSize: [12, 12],
                 iconAnchor: [6, 6],
+                popupAnchor: [0, -8]
+            });
+        }
+
+        function makeAltStopIcon(visual) {
+            return L.divIcon({
+                className: "",
+                html: `<div class="alt-stop-dot" style="border-color:${visual.altColor}"></div>`,
+                iconSize: [11, 11],
+                iconAnchor: [5, 5],
                 popupAnchor: [0, -8]
             });
         }
@@ -1302,13 +1390,18 @@
 
         function compactPopup(bus) {
             const role = isSupportBus(bus) ? "SUPPORT" : "MAIN";
+            const stopped = String(bus.eventType || "").toUpperCase() === "STOP"
+                || String(bus.doorStatus || "").toUpperCase() === "OPEN";
+            const dwellText = stopped ? `${Math.max(0, Math.round(num(bus.dwellRemaining)))}s` : "-";
+            const capacity = num(bus.capacity, BUS_CAPACITY);
             return `
                 <div>
                     <div class="popup-title">${escapeHtml(bus.busId)} <span style="color:${getRouteColor(bus.routeId)}">${escapeHtml(normalizeRouteId(bus.routeId))}</span></div>
                     <div class="popup-row"><span>Role</span><b>${role}</b></div>
                     <div class="popup-row"><span>Speed</span><b>${speedKmh(bus).toFixed(1)} km/h</b></div>
-                    <div class="popup-row"><span>Passengers</span><b>${num(bus.passengerCount)}/${BUS_CAPACITY}</b></div>
+                    <div class="popup-row"><span>Passengers</span><b>${num(bus.passengerCount)}/${capacity}</b></div>
                     <div class="popup-row"><span>Event</span><b>${escapeHtml(bus.eventType || "-")}</b></div>
+                    <div class="popup-row"><span>Dwell</span><b>${dwellText}</b></div>
                     <div class="popup-row"><span>Traffic</span><b>${escapeHtml(bus.trafficLevel || "-")}</b></div>
                     <div class="popup-row"><span>Stop</span><b>${escapeHtml(bus.currentStopName || "-")}</b></div>
                 </div>
@@ -1443,14 +1536,32 @@
 
         function route57AffectedBounds() {
             const scenario = SCENARIOS[selectedScenarioId];
+            const alternative = route57ActiveAlternative();
+            const altShape = alternative?.altShape || [];
+            if (altShape.length > 1) {
+                const entry = nearestShapeIndex("Route_57", altShape[0].latitude, altShape[0].longitude);
+                const exit = nearestShapeIndex("Route_57", altShape[altShape.length - 1].latitude, altShape[altShape.length - 1].longitude);
+                if (entry >= 0 && exit >= 0) {
+                    return {
+                        start: Math.min(entry, exit),
+                        end: Math.max(entry, exit),
+                        stops: [],
+                        entry,
+                        exit,
+                        source: "alternative-entry-exit"
+                    };
+                }
+            }
+
             const stops = routeData.Route_57?.stops || [];
-            const affectedSequences = scenario?.affectedSequences || [9, 10, 11];
+            const affectedSequences = scenario?.affectedSequences || [8];
             const affected = stops.filter(stop => affectedSequences.includes(Number(stop.sequence)));
             if (!affected.length) return null;
             return {
                 start: Math.min(...affected.map(stop => stop.routeIndex)),
                 end: Math.max(...affected.map(stop => stop.routeIndex)),
-                stops: affected
+                stops: affected,
+                source: "fallback-stops"
             };
         }
 
@@ -1458,20 +1569,35 @@
             return selectedScenarioId !== "NONE" && Boolean(SCENARIOS[selectedScenarioId]);
         }
 
+        function route57AlternativeForScenario(scenarioId) {
+            const data = routeData.Route_57 || {};
+            return data.scenarioAlternatives?.[scenarioId] || {
+                altShape: data.altShape || [],
+                altStops: data.altStops || [],
+                hasAltShape: Boolean(data.hasAltShape),
+                hasAltStops: Boolean(data.hasAltStops),
+                alternativeRouteId: "Route_57_ALT"
+            };
+        }
+
+        function route57ActiveAlternative() {
+            return route57AlternativeForScenario(selectedScenarioId);
+        }
+
         function scenarioVisual(type) {
             const normalized = String(type || "ROADWORKS").toUpperCase();
             if (normalized === "TRAFFIC_JAM") {
-                return { color: "#d94141", altColor: "#0f9faf", dash: "8 9", label: "Severe congestion" };
+                return { color: "#d94141", altColor: "#0f9faf", dash: "8 9", label: "Severe congestion / Syganak \u2014 Kabanbay Batyr" };
             }
             if (normalized === "SECURITY_CLOSURE") {
-                return { color: "#b4232d", altColor: "#2367e8", dash: "2 8", label: "Restricted road" };
+                return { color: "#b4232d", altColor: "#2367e8", dash: "2 8", label: "Security closure / Syganak \u2014 Kabanbay Batyr restriction" };
             }
-            return { color: "#e15a24", altColor: "#009f88", dash: "10 8", label: "Roadworks" };
+            return { color: "#e15a24", altColor: "#009f88", dash: "10 8", label: "Roadworks / Syganak \u2014 Kabanbay Batyr" };
         }
 
         function nearestAlternativeDistanceForStop(stop) {
-            const data = routeData.Route_57 || {};
-            const candidates = [...(data.altStops || []), ...(data.altShape || [])];
+            const alternative = route57ActiveAlternative();
+            const candidates = [...(alternative.altStops || []), ...(alternative.altShape || [])];
             if (!candidates.length) return null;
             return Math.round(Math.min(...candidates.map(point =>
                 distanceMeters(stop.latitude, stop.longitude, point.latitude, point.longitude)
@@ -1761,6 +1887,7 @@
             const scenario = displayScenarioForBus(bus) || SCENARIOS[selectedScenarioId];
             const visual = scenarioVisual(scenario?.incidentType);
             const data = routeData.Route_57 || {};
+            const alternative = route57AlternativeForScenario(scenario?.scenarioId || selectedScenarioId);
             const shape = data.shape || [];
             const bounds = route57AffectedBounds();
             const start = Math.max(0, Math.floor(num(bus?.affectedSegmentStartIndex, bounds?.start ?? -1)));
@@ -1785,7 +1912,7 @@
                     L.marker([point.latitude, point.longitude], {
                         icon: L.divIcon({
                             className: "",
-                            html: `<div class="incident-marker">${incidentIcon(scenario?.incidentType || bus?.incidentType)}</div>`,
+                            html: `<div class="incident-marker" style="border-color:${visual.color}">${incidentIcon(scenario?.incidentType || bus?.incidentType)}</div>`,
                             iconSize: [28, 28],
                             iconAnchor: [14, 14]
                         })
@@ -1802,20 +1929,34 @@
                     icon: L.divIcon({
                         className: "",
                         html: `<div class="incident-label">${escapeHtml(visual.label)}</div>`,
-                        iconSize: [116, 26],
-                        iconAnchor: [58, -10]
+                        iconSize: [300, 26],
+                        iconAnchor: [150, -10]
                     })
                 }).addTo(scenarioLayer);
             }
 
-            if (data.altShape?.length > 1) {
-                L.polyline(data.altShape.map(point => [point.latitude, point.longitude]), {
+            if (alternative.altShape?.length > 1) {
+                L.polyline(alternative.altShape.map(point => [point.latitude, point.longitude]), {
                     color: visual.altColor,
                     weight: 6,
                     opacity: 0.86,
                     lineCap: "round",
                     lineJoin: "round"
                 }).addTo(scenarioLayer);
+            }
+
+            if (alternative.altStops?.length) {
+                alternative.altStops.forEach(stop => {
+                    L.marker([stop.latitude, stop.longitude], { icon: makeAltStopIcon(visual) })
+                        .bindPopup(`
+                            <div>
+                                <div class="popup-title">${escapeHtml(stop.name)}</div>
+                                <div class="popup-row"><span>Route</span><b>Route_57 alt</b></div>
+                                <div class="popup-row"><span>Corridor</span><b>${escapeHtml(alternative.alternativeRouteId || "Alternative")}</b></div>
+                            </div>
+                        `)
+                        .addTo(scenarioLayer);
+                });
             }
         }
 

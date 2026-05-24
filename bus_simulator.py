@@ -28,6 +28,8 @@ SHAPE_FILE = ROUTE_DIR / "route_57_shape.csv"
 STOPS_FILE = ROUTE_DIR / "route_57_stops.csv"
 ALT_SHAPE_FILE = ROUTE_DIR / "route_57_shape_alt.csv"
 ALT_STOPS_FILE = ROUTE_DIR / "route_57_stops_alt.csv"
+MINISTRY_ALT_SHAPE_FILE = ROUTE_DIR / "route_57_shape_alt_minis.csv"
+MINISTRY_ALT_STOPS_FILE = ROUTE_DIR / "route_57_stops_alt_minis.csv"
 SCENARIO_CONTROL_FILE = BASE_DIR / "data" / "runtime" / "route57_scenario_control.json"
 
 # Old GPS file is used ONLY as a real speed profile.
@@ -481,43 +483,56 @@ REROUTE_SCENARIO_REGISTRY = {
         "scenarioId": "R57_ROADWORKS_SARAISHYK",
         "routeId": "Route_57",
         "incidentType": "ROADWORKS",
-        "title": "Roadworks near Saraishyk / Akmeshit corridor",
-        "description": "Lane maintenance and heavy congestion near Saraishyk, Akmeshit and Ministry district.",
+        "title": "Roadworks near Syganak / Kabanbay Batyr",
+        "description": "Lane maintenance and heavy congestion on Syganak street and Kabanbay Batyr avenue.",
         "severity": "HIGH",
         "expectedDelayMinutes": 8,
+        "alternativeRouteId": "Route_57_ALT_ROADWORKS",
+        "altShapeFile": ALT_SHAPE_FILE,
+        "altStopsFile": ALT_STOPS_FILE,
+        "requiresReroute": False,
         "affectedStops": [
             "Улица Сарайшык",
             "Улица Акмешит",
             "Министерство иностранных дел"
         ],
+        "affectedRoads": ["Syganak street", "Kabanbay Batyr avenue"],
+        "affectedStops": [],
         "activeByDefault": True
     },
     "R57_TRAFFIC_JAM_SARAISHYK": {
         "scenarioId": "R57_TRAFFIC_JAM_SARAISHYK",
         "routeId": "Route_57",
         "incidentType": "TRAFFIC_JAM",
-        "title": "Severe congestion near Saraishyk / Akmeshit",
-        "description": "Traffic jam causing major delay on the normal Route_57 corridor.",
+        "title": "Severe congestion near Syganak / Kabanbay Batyr",
+        "description": "Traffic jam causing major delay on Syganak street and Kabanbay Batyr avenue.",
         "severity": "HIGH",
         "expectedDelayMinutes": 7,
-        "affectedStops": [
-            "РЈР»РёС†Р° РЎР°СЂР°Р№С€С‹Рє",
-            "РЈР»РёС†Р° РђРєРјРµС€РёС‚",
-            "РњРёРЅРёСЃС‚РµСЂСЃС‚РІРѕ РёРЅРѕСЃС‚СЂР°РЅРЅС‹С… РґРµР»"
-        ],
+        "alternativeRouteId": "Route_57_ALT_TRAFFIC",
+        "altShapeFile": ALT_SHAPE_FILE,
+        "altStopsFile": ALT_STOPS_FILE,
+        "requiresReroute": False,
+        "affectedRoads": ["Syganak street", "Kabanbay Batyr avenue"],
+        "affectedStops": [],
         "activeByDefault": False
     },
     "R57_SECURITY_CLOSURE_MINISTRY": {
         "scenarioId": "R57_SECURITY_CLOSURE_MINISTRY",
         "routeId": "Route_57",
         "incidentType": "SECURITY_CLOSURE",
-        "title": "Security closure near Ministry area",
-        "description": "Temporary government district closure near Ministry area.",
+        "title": "Security closure near Syganak / Kabanbay Batyr",
+        "description": "Temporary restricted road section on Syganak street and Kabanbay Batyr avenue.",
         "severity": "HIGH",
         "expectedDelayMinutes": 10,
+        "alternativeRouteId": "Route_57_ALT_MINISTRY",
+        "altShapeFile": MINISTRY_ALT_SHAPE_FILE,
+        "altStopsFile": MINISTRY_ALT_STOPS_FILE,
+        "requiresReroute": True,
         "affectedStops": [
             "Министерство иностранных дел"
         ],
+        "affectedRoads": ["Syganak street", "Kabanbay Batyr avenue"],
+        "affectedStops": [],
         "activeByDefault": False
     }
 }
@@ -1349,7 +1364,46 @@ def nearest_alternative_distance(stop: dict, alt_shape_df: pd.DataFrame, alt_sto
     return best_distance
 
 
-def validate_passenger_friendly_reroute(scenario: dict, route_stops: list, alt_shape_df: pd.DataFrame, alt_stops_df: pd.DataFrame):
+def stops_for_affected_route_segment(route_stops: list, affected_start: int = None, affected_end: int = None) -> list:
+    if affected_start is None or affected_end is None:
+        return []
+
+    start = min(int(affected_start), int(affected_end))
+    end = max(int(affected_start), int(affected_end))
+    segment_stops = [
+        stop
+        for stop in route_stops
+        if start <= int(stop.get("routeIndex", -1)) <= end
+    ]
+
+    if segment_stops:
+        return segment_stops
+
+    nearest = []
+    for target_index in [start, end]:
+        if not route_stops:
+            continue
+        stop = min(
+            route_stops,
+            key=lambda item: abs(int(item.get("routeIndex", 0)) - int(target_index))
+        )
+        if int(stop.get("stopSequence", -1)) not in {
+            int(item.get("stopSequence", -2))
+            for item in nearest
+        }:
+            nearest.append(stop)
+
+    return nearest
+
+
+def validate_passenger_friendly_reroute(
+    scenario: dict,
+    route_stops: list,
+    alt_shape_df: pd.DataFrame,
+    alt_stops_df: pd.DataFrame,
+    affected_start: int = None,
+    affected_end: int = None
+):
     results = []
     max_distance = None
     rerouting_allowed = True
@@ -1363,12 +1417,24 @@ def validate_passenger_friendly_reroute(scenario: dict, route_stops: list, alt_s
             "reroutingAllowed": False
         }
 
-    for stop_name in scenario.get("affectedStops", []):
-        stop = find_mapped_stop_by_name(route_stops, stop_name)
+    candidate_stops = stops_for_affected_route_segment(
+        route_stops,
+        affected_start=affected_start,
+        affected_end=affected_end
+    )
 
-        if stop is None:
-            print(f"WARNING: affected stop not found on {scenario['routeId']}: {stop_name}")
-            continue
+    if not candidate_stops:
+        for stop_name in scenario.get("affectedStops", []):
+            stop = find_mapped_stop_by_name(route_stops, stop_name)
+
+            if stop is None:
+                print(f"WARNING: affected stop not found on {scenario['routeId']}: {stop_name}")
+                continue
+
+            candidate_stops.append(stop)
+
+    for stop in candidate_stops:
+        stop_name = str(stop.get("name", ""))
 
         distance = nearest_alternative_distance(stop, alt_shape_df, alt_stops_df)
         rounded_distance = int(round(distance)) if distance is not None else None
@@ -1439,6 +1505,13 @@ def get_requested_route57_scenario_id() -> str:
     return scenario_id
 
 
+def get_route57_scenario_alternative_files(scenario: dict):
+    return (
+        Path(scenario.get("altShapeFile") or ALT_SHAPE_FILE),
+        Path(scenario.get("altStopsFile") or ALT_STOPS_FILE)
+    )
+
+
 def build_route57_scenario_context(route_context: dict, scenario_id: str = None):
     if route_context["route_id"] != "Route_57":
         return None
@@ -1449,8 +1522,15 @@ def build_route57_scenario_context(route_context: dict, scenario_id: str = None)
         return None
 
     scenario = dict(REROUTE_SCENARIO_REGISTRY[scenario_id])
-    alt_shape_df = load_optional_route_shape(ALT_SHAPE_FILE, "Route_57 alternative route")
-    alt_stops_df = load_optional_route_stops(ALT_STOPS_FILE, "Route_57 alternative stops")
+    alt_shape_file, alt_stops_file = get_route57_scenario_alternative_files(scenario)
+    alt_shape_df = load_optional_route_shape(
+        alt_shape_file,
+        f"Route_57 alternative route ({scenario['scenarioId']})"
+    )
+    alt_stops_df = load_optional_route_stops(
+        alt_stops_file,
+        f"Route_57 alternative stops ({scenario['scenarioId']})"
+    )
     route_df = route_context["route_df"]
     route_stops = route_context["route_stops"]
 
@@ -1462,8 +1542,8 @@ def build_route57_scenario_context(route_context: dict, scenario_id: str = None)
         else:
             print(f"WARNING: affected stop could not be mapped: {stop_name}")
 
-    affected_start = min((int(stop["routeIndex"]) for stop in matched_stops), default=None)
-    affected_end = max((int(stop["routeIndex"]) for stop in matched_stops), default=None)
+    fallback_affected_start = min((int(stop["routeIndex"]) for stop in matched_stops), default=None)
+    fallback_affected_end = max((int(stop["routeIndex"]) for stop in matched_stops), default=None)
 
     if not alt_shape_df.empty:
         entry_index = nearest_route_index(
@@ -1476,18 +1556,28 @@ def build_route57_scenario_context(route_context: dict, scenario_id: str = None)
             float(alt_shape_df.iloc[-1]["latitude"]),
             float(alt_shape_df.iloc[-1]["longitude"])
         )
+        affected_start = min(int(entry_index), int(exit_index))
+        affected_end = max(int(entry_index), int(exit_index))
     else:
-        entry_index = affected_start
-        exit_index = affected_end
+        entry_index = fallback_affected_start
+        exit_index = fallback_affected_end
+        affected_start = fallback_affected_start
+        affected_end = fallback_affected_end
 
     reconnect_index = None
-    if affected_end is not None:
-        reconnect_index = min(len(route_df) - 1, int(affected_end) + 1)
     if exit_index is not None:
-        reconnect_index = max(int(exit_index), int(reconnect_index or exit_index))
-        reconnect_index = min(len(route_df) - 1, reconnect_index)
+        reconnect_index = min(len(route_df) - 1, int(exit_index))
+    elif affected_end is not None:
+        reconnect_index = min(len(route_df) - 1, int(affected_end) + 1)
 
-    validation = validate_passenger_friendly_reroute(scenario, route_stops, alt_shape_df, alt_stops_df)
+    validation = validate_passenger_friendly_reroute(
+        scenario,
+        route_stops,
+        alt_shape_df,
+        alt_stops_df,
+        affected_start=affected_start,
+        affected_end=affected_end
+    )
 
     print(
         "Route_57 affected segment:",
@@ -1642,6 +1732,23 @@ def get_support_assignment_key(stop, parent_route_id: str = None) -> str:
 
 def is_terminal_taper_stop(stop) -> bool:
     return bool(stop.get("isFinalStop") or stop.get("isTerminalTaper"))
+
+
+def is_final_terminal_stop(stop) -> bool:
+    return bool(stop.get("isFinalStop"))
+
+
+def clear_unserved_queue_for_stop(stop, reason: str = ""):
+    stop_key = get_stop_key(stop)
+    previous_queue = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
+    UNSERVED_QUEUES_BY_STOP[stop_key] = 0
+
+    if previous_queue > 0:
+        print(
+            f"UNSERVED QUEUE cleared at final terminal {stop['name']} | "
+            f"previous={previous_queue}"
+            + (f" | {reason}" if reason else "")
+        )
 
 
 def support_free_space(bus) -> int:
@@ -1982,6 +2089,10 @@ def store_unserved_queue(stop, queue_count: int):
     if queue_count <= 0:
         return
 
+    if is_final_terminal_stop(stop):
+        clear_unserved_queue_for_stop(stop, reason="support dispatch is disabled at final terminal")
+        return
+
     stop_key = get_stop_key(stop)
     previous_queue = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
     UNSERVED_QUEUES_BY_STOP[stop_key] = previous_queue + int(queue_count)
@@ -1994,7 +2105,7 @@ def store_unserved_queue(stop, queue_count: int):
 
 def set_unserved_queue(stop, queue_count: int):
     stop_key = get_stop_key(stop)
-    queue_count = max(0, int(queue_count))
+    queue_count = 0 if is_final_terminal_stop(stop) else max(0, int(queue_count))
     UNSERVED_QUEUES_BY_STOP[stop_key] = queue_count
 
     print(
@@ -2594,16 +2705,20 @@ def evaluate_support_dispatch_decision(stop, requester_bus=None) -> dict:
     if queue_count <= 0:
         return base
 
-    if existing_support_decision is not None:
-        base.update(existing_support_decision)
-        return base
-
     if is_terminal_taper_stop(stop):
+        if is_final_terminal_stop(stop):
+            clear_unserved_queue_for_stop(stop, reason="support dispatch is disabled at final terminal")
+            base["queueCount"] = 0
+
         base.update({
             "supportDecision": "MONITOR_QUEUE",
             "supportAction": "Monitor queue",
-            "supportReason": "Queue is at the terminal taper/final section; ordinary service should clear demand."
+            "supportReason": "Queue is at the terminal taper/final section; support dispatch is not operationally justified."
         })
+        return base
+
+    if existing_support_decision is not None:
+        base.update(existing_support_decision)
         return base
 
     if not is_support_critical_stop(stop):
@@ -2695,6 +2810,15 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
     if not support_enabled:
         return None
 
+    if is_terminal_taper_stop(stop):
+        if is_final_terminal_stop(stop):
+            clear_unserved_queue_for_stop(stop, reason="support dispatch request ignored at final terminal")
+        print(
+            f"SUPPORT DISPATCH SKIPPED at {stop['name']} | "
+            "terminal taper/final stop"
+        )
+        return None
+
     if not is_support_critical_stop(stop):
         return None
 
@@ -2728,7 +2852,7 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
         action = str(support_decision.get("supportAction", ""))
         if decision == "SUPPORT_ALREADY_ASSIGNED":
             print(
-                f"SUPPORT DISPATCH SKIPPED: existing support already assigned to this queue | "
+                f"SUPPORT ALREADY ASSIGNED: existing support already assigned to this queue | "
                 f"{stop['name']} | "
                 f"bus={support_decision.get('supportBusId')} | "
                 f"status={support_decision.get('supportAssignmentStatus') or support_decision.get('supportAssignmentState')}"
@@ -2753,7 +2877,7 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
                 )
         elif decision == "WAIT_FOR_NEXT_BUS":
             print(
-                f"SUPPORT DISPATCH SKIPPED: next regular bus close | "
+                f"SUPPORT DISPATCH SKIPPED: next ordinary bus close | "
                 f"{stop['name']} | queue={queue_count} | "
                 f"next_bus={support_decision.get('nextRegularBusId')} "
                 f"eta={support_decision.get('nextRegularBusEtaMinutes')}"
@@ -2832,7 +2956,53 @@ def dispatch_support_bus_if_needed(stop, requester_bus=None):
     return support_bus
 
 
-def start_support_pickup_at_target(bus, stop):
+def start_final_terminal_dwell(bus, stop, route_row=None, route_index: int = None) -> bool:
+    current_passengers = int(bus.get("passengerCount", 0))
+    load_level = get_route_load_level(route_row) if route_row is not None else "ZERO"
+    alighting = current_passengers
+
+    clear_unserved_queue_for_stop(stop, reason="final terminal clears all remaining demand")
+
+    bus["passengerCount"] = 0
+    bus["dwellRemaining"] = calculate_dwell_ticks(
+        boarding=0,
+        alighting=alighting,
+        stop=stop,
+        load_level=load_level
+    )
+    bus["currentStopName"] = stop["name"]
+    bus["currentStopSequence"] = int(stop["stopSequence"])
+    bus["lastBoarding"] = 0
+    bus["lastAlighting"] = alighting
+    bus["lastWaiting"] = 0
+    bus["lastLoadLevel"] = load_level
+    bus["targetPassengers"] = 0
+    bus["isTerminalStop"] = True
+    bus["terminalStopSequence"] = int(stop["stopSequence"])
+    bus["terminalStatus"] = "FINAL_TERMINAL_DWELL"
+    bus["state"] = STATE_STOPPING_AT_STOP
+
+    if bus.get("busRole") == "SUPPORT":
+        resolve_support_assignment_for_bus(bus, reason="support bus reached final terminal")
+
+    print(
+        f"TERMINAL STOP {bus['busId']} at {stop['name']} | "
+        f"+0 boarded, -{alighting} alighted, unserved queue left=0, "
+        f"total={bus['passengerCount']}, dwell={bus['dwellRemaining']}s"
+    )
+
+    return True
+
+
+def start_support_pickup_at_target(bus, stop, route_row=None, route_index: int = None):
+    if is_final_terminal_stop(stop):
+        return start_final_terminal_dwell(
+            bus,
+            stop,
+            route_row=route_row,
+            route_index=route_index
+        )
+
     stop_key = get_stop_key(stop)
     queue_before = int(UNSERVED_QUEUES_BY_STOP.get(stop_key, 0))
     free_space = max(0, int(bus.get("capacity", SUPPORT_BUS_CAPACITY)) - int(bus["passengerCount"]))
@@ -2921,7 +3091,11 @@ def get_support_residual_boarding_demand(bus, stop, load_level: str, route_index
     if is_scenario_focus_stop(stop_name):
         demand += rng.randint(1, 5)
 
-    demand = int(round(demand * SUPPORT_RESIDUAL_BOARDING_MULTIPLIER))
+    residual_multiplier = float(get_support_rule(
+        "residual_boarding_multiplier",
+        SUPPORT_RESIDUAL_BOARDING_MULTIPLIER
+    ))
+    demand = int(round(demand * residual_multiplier))
 
     # Once support bus becomes quite loaded, residual demand should slow down.
     if current_passengers >= SUPPORT_SOFT_COMFORT_LOAD:
@@ -2939,6 +3113,9 @@ def get_support_residual_alighting(bus, stop, load_level: str, route_index: int)
     if current_passengers <= 0:
         return 0
 
+    if stop.get("isFinalStop"):
+        return current_passengers
+
     rng = random.Random(
         71000
         + int(route_index) * 19
@@ -2946,8 +3123,8 @@ def get_support_residual_alighting(bus, stop, load_level: str, route_index: int)
         + current_passengers
     )
 
-    if stop.get("isFinalStop"):
-        return min(current_passengers, rng.randint(max(4, current_passengers // 2), current_passengers))
+    if current_passengers <= 3:
+        return rng.randint(0, current_passengers)
 
     if is_scenario_focus_stop(stop.get("name", "")):
         max_alighting = min(current_passengers, SUPPORT_FOCUS_MAX_ALIGHTING)
@@ -2983,6 +3160,13 @@ def start_support_residual_service_dwell(
     bus_capacity = int(bus.get("capacity", SUPPORT_BUS_CAPACITY))
 
     load_level = get_route_load_level(route_row)
+    if is_final_terminal_stop(stop):
+        return start_final_terminal_dwell(
+            bus,
+            stop,
+            route_row=route_row,
+            route_index=route_index
+        )
 
     alighting = get_support_residual_alighting(
         bus=bus,
@@ -3061,6 +3245,14 @@ def start_dwell_at_stop(bus, stop, route_row, route_index: int, allow_support_di
     Bus_1 uses the main real passenger profile.
     Support buses after pickup use residual demand, so they do not fill to 60/60 too quickly.
     """
+    if is_final_terminal_stop(stop):
+        return start_final_terminal_dwell(
+            bus,
+            stop,
+            route_row=route_row,
+            route_index=route_index
+        )
+
     if is_support_residual_service(bus):
         return start_support_residual_service_dwell(
             bus=bus,
@@ -3161,6 +3353,26 @@ def start_dwell_at_stop(bus, stop, route_row, route_index: int, allow_support_di
 
 def reset_stop_state_if_needed(bus):
     if bus["dwellRemaining"] == 0:
+        if bus.get("terminalStatus") == "FINAL_TERMINAL_DWELL" or bus.get("isTerminalStop"):
+            if bus.get("busRole") == "SUPPORT":
+                resolve_support_assignment_for_bus(bus, reason="support bus completed final terminal dwell")
+
+            bus["passengerCount"] = 0
+            bus["active"] = False
+            bus["state"] = STATE_COMPLETED_ROUTE
+            bus["terminalStatus"] = "COMPLETED_ROUTE"
+            bus["currentStopName"] = None
+            bus["currentStopSequence"] = None
+            bus["lastBoarding"] = 0
+            bus["lastAlighting"] = 0
+            bus["lastWaiting"] = 0
+            bus["lastLoadLevel"] = None
+            bus["targetPassengers"] = None
+            bus["lastSupportDecision"] = None
+            bus["nextStopIndex"] = max(int(bus.get("nextStopIndex", 0)), ROUTE_POINT_COUNT)
+            bus["current_index"] = max(int(bus.get("current_index", 0)) + 1, ROUTE_POINT_COUNT)
+            return
+
         if bus.get("busRole") == "SUPPORT" and bus.get("state") == STATE_BOARDING_UNSERVED_QUEUE:
             bus["state"] = STATE_CONTINUING_ROUTE_AFTER_PICKUP
             assignment = update_support_assignment_for_bus(
@@ -3182,6 +3394,8 @@ def reset_stop_state_if_needed(bus):
         bus["lastLoadLevel"] = None
         bus["targetPassengers"] = None
         bus["lastSupportDecision"] = None
+        bus["isTerminalStop"] = False
+        bus["terminalStatus"] = None
         bus["current_index"] += 1
 
 
@@ -3208,7 +3422,12 @@ def handle_support_bus_tick(bus, route_df, route_stops):
         target_stop = get_stop_by_sequence(route_stops, int(bus["targetStopSequence"]))
 
         if target_stop is not None and current_index >= int(target_stop["routeIndex"]):
-            start_support_pickup_at_target(bus, target_stop)
+            start_support_pickup_at_target(
+                bus,
+                target_stop,
+                route_row=route_row,
+                route_index=current_index
+            )
             telemetry = build_stop_telemetry(route_row, bus, current_index)
             bus["dwellRemaining"] -= 1
             reset_stop_state_if_needed(bus)
@@ -3403,6 +3622,9 @@ def evaluate_rerouting_decision(
         state = scenario_context.get("state", "INACTIVE")
         alt_available = not scenario_context.get("altShape", pd.DataFrame()).empty
         expected_delay = int(scenario.get("expectedDelayMinutes", 0))
+        reroute_required = bool(scenario.get("requiresReroute", False))
+        reroute_allowed = bool(validation["reroutingAllowed"] or reroute_required)
+        passenger_impact_blocks_reroute = validation["passengerImpact"] == "HIGH" and not reroute_required
         route_length = len(route_context.get("route_df", [])) if route_context else 0
         completed_bus_ids = scenario_context.setdefault("completedBusIds", set())
         incident_ahead = (
@@ -3412,7 +3634,7 @@ def evaluate_rerouting_decision(
             and (not route_length or current_index < route_length - int(REROUTE_RULES["terminal_guard_points"]))
         )
         approaching_entry = entry_index is not None and current_index >= max(0, int(entry_index) - int(REROUTE_RULES["entry_buffer_points"]))
-        saved_minutes = max(0, expected_delay - 2) if alt_available and validation["reroutingAllowed"] else None
+        saved_minutes = max(0, expected_delay - 2) if alt_available and reroute_allowed else None
 
         if bus.get("routeContextId") != "Route_57" or bus.get("busRole") != "MAIN":
             decision_type = "NORMAL"
@@ -3438,11 +3660,15 @@ def evaluate_rerouting_decision(
             decision_type = "MONITOR"
             action = "Monitor"
             reason = "Incident is not ahead of the selected bus."
-        elif not validation["reroutingAllowed"] or validation["passengerImpact"] == "HIGH":
+        elif not reroute_allowed or passenger_impact_blocks_reroute:
             decision_type = "HOLD_ROUTE"
             action = "Hold normal route"
             reason = "Passenger walking impact is too high for rerouting."
-        elif int(bus.get("passengerCount", 0)) >= int(bus.get("capacity", BUS_CAPACITY)) and validation["passengerImpact"] != "LOW":
+        elif (
+            not reroute_required
+            and int(bus.get("passengerCount", 0)) >= int(bus.get("capacity", BUS_CAPACITY))
+            and validation["passengerImpact"] != "LOW"
+        ):
             decision_type = "SUPPORT_BUS_INSTEAD"
             action = "Hold normal route"
             reason = "Crowded bus and passenger-heavy skipped corridor favor support-bus intervention."
@@ -3453,7 +3679,10 @@ def evaluate_rerouting_decision(
         elif approaching_entry:
             decision_type = "REROUTE_RECOMMENDED"
             action = "Use alternative route"
-            reason = "Roadworks and congestion are ahead; validated alternative corridor is available."
+            if reroute_required:
+                reason = "Security closure is active; the ministry alternative corridor is required."
+            else:
+                reason = "Roadworks and congestion are ahead; validated alternative corridor is available."
         else:
             decision_type = "MONITOR"
             action = "Monitor"
@@ -3468,17 +3697,17 @@ def evaluate_rerouting_decision(
             "reason": reason,
             "severity": scenario["severity"],
             "normalEtaMinutes": expected_delay if decision_type != "NORMAL" else None,
-            "alternativeEtaMinutes": 2 if alt_available and validation["reroutingAllowed"] else None,
+            "alternativeEtaMinutes": 2 if alt_available and reroute_allowed else None,
             "savedMinutes": saved_minutes,
             "passengerImpact": validation["passengerImpact"],
             "affectedStops": validation["affectedStops"],
             "maxWalkingDistanceMeters": validation["maxWalkingDistanceMeters"],
-            "reroutingAllowed": bool(validation["reroutingAllowed"]),
+            "reroutingAllowed": bool(reroute_allowed),
             "action": action,
             "scenarioState": state,
             "affectedSegmentStartIndex": affected_start,
             "affectedSegmentEndIndex": affected_end,
-            "alternativeRouteId": "Route_57_ALT" if alt_available else None,
+            "alternativeRouteId": scenario.get("alternativeRouteId", "Route_57_ALT") if alt_available else None,
             "entryRouteIndex": entry_index,
             "reconnectRouteIndex": reconnect_index
         }
@@ -3573,6 +3802,8 @@ def build_stop_telemetry(route_row, bus, route_index: int, route_context=None):
         "busRole": bus.get("busRole", "MAIN"),
         "capacity": int(bus.get("capacity", BUS_CAPACITY)),
         "state": bus.get("state", "IN_SERVICE"),
+        "isTerminalStop": bool(bus.get("isTerminalStop", False)),
+        "terminalStatus": bus.get("terminalStatus"),
         "originRouteIndex": bus.get("originRouteIndex"),
         "targetRouteIndex": bus.get("targetRouteIndex"),
         "originDescription": bus.get("originDescription"),
@@ -3632,6 +3863,8 @@ def build_moving_telemetry(route_row, bus, route_index: int, route_df=None, rout
         "busRole": bus.get("busRole", "MAIN"),
         "capacity": int(bus.get("capacity", BUS_CAPACITY)),
         "state": bus.get("state", "IN_SERVICE"),
+        "isTerminalStop": bool(bus.get("isTerminalStop", False)),
+        "terminalStatus": bus.get("terminalStatus"),
         "originRouteIndex": bus.get("originRouteIndex"),
         "targetRouteIndex": bus.get("targetRouteIndex"),
         "originDescription": bus.get("originDescription"),
